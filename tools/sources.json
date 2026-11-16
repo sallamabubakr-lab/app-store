@@ -5,5 +5,8 @@
   "daim-calculator": {
     "web": "https://sallamabubakr-lab.github.io/daim-calculator/",
     "shotFrom": "../daim-calculator"
+  },
+  "barbee": {
+    "web": "../barbee"
   }
 }

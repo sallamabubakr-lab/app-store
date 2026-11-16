@@ -87,7 +87,7 @@ function svgToPng(svg, out, size = 512) {
   return ok;
 }
 
-const catalog = readJson(CATALOG, { store: { name: "Sallam Apps", tagline: "Home-made apps for family and friends." }, apps: [] });
+const catalog = readJson(CATALOG, { store: { name: "Biko's Lab", tagline: "Home-made apps for family and friends." }, apps: [] });
 const sources = readJson(SOURCES, {});
 let app = catalog.apps.find((a) => a.id === id);
 const appDir = path.join(ROOT, "apps", id);

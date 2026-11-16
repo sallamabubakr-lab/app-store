@@ -7,6 +7,8 @@
     "shotFrom": "../daim-calculator"
   },
   "barbee": {
-    "web": "../barbee"
+    "web": "../barbee",
+    "apk": "../barbee-open-android/BarBee.apk",
+    "build": "cd ../barbee-open-android && ./build.sh {version}"
   }
 }

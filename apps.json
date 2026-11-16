@@ -55,9 +55,14 @@
       "description": "A week-by-week strength plan that is yours: put in your own name, your own training days and your own exercises, in kg or lb.\n\nEach session shows the weight and reps to beat from last time, so you always know what counts as progress. Log a set with one tap and rest with the built-in timer.\n\nIt starts with an example week you can train as it is. Everything is saved on your own phone, and it works without internet once you have opened it.",
       "color": "#131822",
       "icon": "apps/barbee/icon.png",
-      "version": "1.0",
+      "version": "1.1",
       "updated": "2026-11-16",
       "history": [
+        {
+          "version": "1.1",
+          "date": "2026-11-16",
+          "notes": "BarBee is now also a real Android app: on an Android phone the store downloads the app file to install."
+        },
         {
           "version": "1.0",
           "date": "2026-11-16",
@@ -68,7 +73,11 @@
       "screenshots": [
         "apps/barbee/shot-1.png"
       ],
-      "added": "2026-11-16"
+      "added": "2026-11-16",
+      "android": {
+        "file": "apps/barbee/BarBee-1.1.apk",
+        "size": 136350
+      }
     }
   ]
 }

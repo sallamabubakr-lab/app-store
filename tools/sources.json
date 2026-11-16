@@ -1,0 +1,9 @@
+{
+  "wall-rush": {
+    "web": "../wall-rush"
+  },
+  "daim-calculator": {
+    "web": "https://sallamabubakr-lab.github.io/daim-calculator/",
+    "shotFrom": "../daim-calculator"
+  }
+}

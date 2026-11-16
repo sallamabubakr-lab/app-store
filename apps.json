@@ -1,0 +1,52 @@
+{
+  "store": {
+    "name": "Sallam Apps",
+    "tagline": "Home-made apps for family and friends."
+  },
+  "apps": [
+    {
+      "id": "wall-rush",
+      "name": "Wall Rush",
+      "tagline": "Race to the finish line and drop walls to block your rival.",
+      "description": "A quick two-player board race. Every turn you choose: step closer to the finish line, or drop a wall in your rival's way. First one across wins.\n\nPlay against the computer or pass the phone to a friend.",
+      "color": "#33B07A",
+      "icon": "apps/wall-rush/icon.png",
+      "version": "1.0",
+      "updated": "2026-11-16",
+      "history": [
+        {
+          "version": "1.0",
+          "date": "2026-11-16",
+          "notes": "First version."
+        }
+      ],
+      "web": "apps/wall-rush/app/",
+      "screenshots": [
+        "apps/wall-rush/shot-1.png"
+      ],
+      "added": "2026-11-16"
+    },
+    {
+      "id": "daim-calculator",
+      "name": "Da'im Stoppage Calculator",
+      "tagline": "See what machine stoppages cost a factory.",
+      "description": "Enter a few numbers about a factory and see how much its machine stoppages cost each month and each year.\n\nDon't know the numbers? Use the stoppage log: tap when a machine stops and when it runs again, and the calculator measures it for you. In English and Arabic.",
+      "color": "#0C2125",
+      "icon": "apps/daim-calculator/icon.png",
+      "version": "1.0",
+      "updated": "2026-11-16",
+      "history": [
+        {
+          "version": "1.0",
+          "date": "2026-11-16",
+          "notes": "First version."
+        }
+      ],
+      "web": "https://sallamabubakr-lab.github.io/daim-calculator/",
+      "screenshots": [
+        "apps/daim-calculator/shot-1.png"
+      ],
+      "added": "2026-11-16"
+    }
+  ]
+}

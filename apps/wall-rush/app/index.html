@@ -1,0 +1,1898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wall Rush</title>
+<script>
+  // iPhone starts a home screen app at the page's address only when there is no manifest. That lets
+  // a profile key travel into the app (see prepareTransfer). Other phones get the manifest.
+  (function () {
+    var u = navigator.userAgent;
+    var ios = !/Android/.test(u) && (/iPhone|iPad|iPod/.test(u) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+    if (!ios) { var l = document.createElement("link"); l.rel = "manifest"; l.href = "manifest.webmanifest"; document.head.appendChild(l); }
+  })();
+</script>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wall Rush">
+<meta name="theme-color" content="#eef1f6">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;600;700&display=swap">
+<style>
+/* Layout: one centered column — header, the board in a soft bezel, a player bar beneath. */
+:root {
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --board: #f7f9fc;
+  --bezel: #d9dfe9;
+  --grid: #dde3ec;
+  --ink: #1d2433;
+  --muted: #6b7486;
+  --finish: #33b07a;
+  --finish-tint: rgba(51, 176, 122, 0.16);
+  --blue: #2f5fe0;
+  --blue-hi: #8fb0ff;
+  --red: #dc2f45;
+  --red-hi: #ff9aa6;
+  --shadow: rgba(25, 35, 60, 0.18);
+  --font-display: "Unbounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151c; --panel: #1b2029; --board: #1e242e; --bezel: #2c3442; --grid: #2b3240;
+    --ink: #e8ecf3; --muted: #9099ab; --finish: #47c98f; --finish-tint: rgba(71, 201, 143, 0.14);
+    --blue: #5682ff; --blue-hi: #a9c1ff; --red: #f04a5f; --red-hi: #ffb0ba; --shadow: rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151c; --panel: #1b2029; --board: #1e242e; --bezel: #2c3442; --grid: #2b3240;
+  --ink: #e8ecf3; --muted: #9099ab; --finish: #47c98f; --finish-tint: rgba(71, 201, 143, 0.14);
+  --blue: #5682ff; --blue-hi: #a9c1ff; --red: #f04a5f; --red-hi: #ffb0ba; --shadow: rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+* { -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px;
+  padding-inline: 16px; padding-block: 16px; box-sizing: border-box;
+}
+.app { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
+h1 span { color: var(--red); }
+h1 b { color: var(--blue); font-weight: 700; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--bezel); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: transparent; color: var(--muted); font: 600 12px var(--font-body); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { border: 1px solid var(--bezel); background: var(--panel); color: var(--ink); font: 600 12px var(--font-body); padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.finish-label, .players {
+  display: flex; align-items: center; gap: 10px; font: 700 11px var(--font-body);
+  letter-spacing: 0.22em; text-transform: uppercase;
+}
+.finish-label { color: var(--finish); justify-content: center; }
+.finish-label::before, .finish-label::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: 0.5; }
+.flag { width: 14px; height: 10px; background: conic-gradient(var(--ink) 25%, transparent 0 50%, var(--ink) 0 75%, transparent 0) 0 0 / 7px 5px; border: 1px solid var(--ink); }
+
+.bezel {
+  position: relative; align-self: center; background: var(--bezel); padding: 10px; border-radius: 22px;
+  box-shadow: 0 18px 40px -18px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+canvas { display: block; border-radius: 14px; background: var(--board); touch-action: manipulation; cursor: pointer; max-width: 100%; }
+
+.overlay {
+  position: absolute; inset: 10px; border-radius: 14px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--board) 78%, transparent); backdrop-filter: blur(3px);
+}
+.overlay .card { text-align: center; display: grid; gap: 12px; padding: 24px; }
+.overlay .who { font-family: var(--font-display); font-size: 26px; font-weight: 700; text-wrap: balance; }
+.overlay .sub { color: var(--muted); }
+
+.players { justify-content: space-between; color: var(--muted); flex-wrap: wrap; row-gap: 8px; }
+.player { display: flex; align-items: center; gap: 8px; }
+.player .dot { width: 12px; height: 12px; border-radius: 50%; }
+.player.blue .dot { background: var(--blue); }
+.player.red .dot { background: var(--red); }
+.player .turn { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid var(--ink); visibility: hidden; }
+.player.active { color: var(--ink); }
+.player.active .turn { visibility: visible; }
+.pips { display: inline-flex; gap: 2px; }
+.pips i { width: 3px; height: 10px; border-radius: 2px; background: var(--grid); }
+.player.blue .pips i.on { background: var(--blue); }
+.player.red .pips i.on { background: var(--red); }
+.status { text-align: center; color: var(--muted); font-size: 13px; line-height: 1.5; min-height: 2.6em; text-wrap: balance; }
+.status strong { color: var(--ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.lobby { display: grid; gap: 12px; }
+.lobby-card { background: var(--panel); border: 1px solid var(--bezel); border-radius: 18px; padding: 18px; display: grid; gap: 12px; }
+.lobby h2 { font-family: var(--font-display); font-size: 17px; font-weight: 500; margin: 0; }
+.lobby h3 { font: 700 11px var(--font-body); letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.lede { margin: 0; color: var(--muted); line-height: 1.55; }
+.lobby-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.join { display: flex; gap: 6px; flex: 1; min-width: 200px; }
+.join input { flex: 1; min-width: 0; border: 1px solid var(--bezel); background: var(--board); color: var(--ink); border-radius: 999px; padding: 7px 14px; font: 700 13px var(--font-body); letter-spacing: 0.2em; text-transform: uppercase; }
+.join input:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); padding: 9px 16px; }
+.lobby-msg { margin: 0; font-size: 13px; color: var(--muted); min-height: 1em; }
+.lobby-msg:empty { display: none; }
+.games { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.games li { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--grid); }
+.games li:first-child { border-top: 0; }
+.games .info { min-width: 0; display: grid; gap: 2px; }
+.games .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.games .meta { font-size: 12px; color: var(--muted); }
+.gamebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.gamebar .code { color: var(--muted); font-size: 13px; }
+.gamebar .code strong { color: var(--ink); font-family: var(--font-display); letter-spacing: 0.12em; margin-left: 4px; }
+.gamebar-actions { display: flex; gap: 8px; }
+.link-fallback { flex-basis: 100%; border: 1px solid var(--bezel); background: var(--board); color: var(--ink); border-radius: 10px; padding: 7px 10px; font: 12px var(--font-body); }
+.wall-confirm {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 1px solid var(--bezel);
+  box-shadow: 0 -8px 24px -12px var(--shadow);
+}
+.wall-confirm .btn { font-size: 15px; padding: 12px 22px; }
+.version { margin: 0; text-align: center; color: var(--muted); font-size: 11px; padding-bottom: 64px; }
+.link { border: 0; background: none; padding: 0; font: inherit; color: var(--blue); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.me-line { margin: 0; color: var(--muted); }
+.me-line strong { color: var(--ink); }
+.coach { background: var(--panel); border: 1px solid var(--bezel); border-radius: 18px; padding: 16px 18px; display: grid; gap: 10px; box-shadow: 0 12px 30px -18px var(--shadow); }
+.coach-step { font: 700 11px var(--font-body); letter-spacing: 0.18em; text-transform: uppercase; color: var(--finish); }
+.coach-text { margin: 0; font-size: 15px; line-height: 1.5; text-wrap: pretty; }
+.coach-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rivalry { text-align: center; font-weight: 700; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--bezel); border-radius: 999px; padding: 6px 14px; align-self: center; }
+.name-screen { display: grid; gap: 12px; padding-top: 8vh; }
+#name-input { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 16px; }
+.score { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.install { display: grid; gap: 12px; padding-top: 4vh; }
+.invite-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 2px solid var(--blue); border-radius: 16px; padding: 12px 14px; box-shadow: 0 12px 30px -18px var(--shadow); }
+.invite-banner span { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; }
+.games li .btn { flex: none; }
+.style-screen { display: grid; gap: 12px; padding-top: 2vh; }
+.style-preview { justify-self: center; }
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.swatch { width: 100%; max-width: 52px; aspect-ratio: 1; justify-self: center; border-radius: 50%; border: 3px solid var(--panel); box-shadow: 0 0 0 1px var(--bezel), inset 0 -5px 10px rgba(0,0,0,0.2); cursor: pointer; }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--ink), inset 0 -5px 10px rgba(0,0,0,0.2); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.tile { display: grid; justify-items: center; gap: 2px; padding: 6px 4px 8px; border: 2px solid var(--bezel); border-radius: 14px; background: var(--board); color: var(--ink); font: 600 12px var(--font-body); cursor: pointer; }
+.tile[aria-pressed="true"] { border-color: var(--ink); background: var(--panel); }
+.ball-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.overlay .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.overlay .msg { margin: 0; font-weight: 700; font-size: 15px; text-wrap: balance; }
+.install h3 { margin: 4px 0 0; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+.steps li { display: flex; gap: 12px; align-items: flex-start; line-height: 1.5; font-size: 15px; }
+.steps li::before {
+  counter-increment: step; content: counter(step); flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ink); color: var(--bg); font: 700 13px var(--font-body); display: grid; place-items: center; margin-top: -1px;
+}
+.glyph { display: inline-block; width: 20px; height: 20px; vertical-align: -4px; margin: 0 2px; color: var(--blue); }
+.install-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); background: var(--board); border: 1px solid var(--bezel); border-radius: 12px; padding: 10px 12px; }
+.variant-row { display: flex; justify-content: center; }
+.coach-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.coach-dots { display: flex; gap: 6px; }
+.coach-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--grid); }
+.coach-dots i.done { background: var(--finish); }
+.coach-dots i.now { background: var(--ink); }
+.coach-title { margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; text-wrap: balance; }
+.coach.won { border-color: var(--finish); box-shadow: 0 0 0 2px var(--finish-tint), 0 12px 30px -18px var(--shadow); }
+.coach.won .coach-title { color: var(--finish); }
+.coach-hint { margin: 0; font-weight: 700; font-size: 14px; color: var(--red); }
+.coach-reward { justify-self: center; }
+.tile:disabled { opacity: 0.45; cursor: default; }
+/* Match view: once both players are in, everything but the game steps aside. */
+.match-bar { display: none; }
+body.match .match-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+body.match header, body.match .variant-row, body.match #gamebar, body.match #rivalry, body.match .version,
+body.match #nudge, body.match #invite, body.match #lobby { display: none !important; }
+body.match .app { gap: 10px; }
+.match-mode { font: 700 11px var(--font-body); letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.match-score { flex: 1; text-align: center; font-weight: 700; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-bar .btn { padding: 6px 12px; }
+.countdown { position: absolute; inset: 10px; border-radius: 14px; display: grid; place-items: center; background: color-mix(in srgb, var(--board) 55%, transparent); pointer-events: none; }
+.countdown span { font-family: var(--font-display); font-weight: 700; font-size: 104px; color: var(--ink); animation: pop 0.8s ease-out both; }
+.countdown span.go { color: var(--finish); font-size: 80px; }
+@keyframes pop { 0% { transform: scale(1.6); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(0.85); opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .countdown span { animation: none; } }
+.nudge-wrap { display: grid; justify-items: center; gap: 4px; }
+.nudge { background: var(--ink); color: var(--bg); border-radius: 18px; padding: 14px 16px; display: grid; gap: 10px; text-align: center; max-width: 340px; box-shadow: 0 16px 34px -16px var(--shadow); }
+.nudge p { margin: 0; font-weight: 700; font-size: 15px; line-height: 1.4; text-wrap: balance; }
+.nudge .coach-actions { justify-content: center; align-items: center; }
+.nudge .btn { background: var(--bg); color: var(--ink); border-color: var(--bg); }
+.nudge .link { color: var(--bg); }
+.nudge-arrow { width: 34px; height: 34px; color: var(--ink); animation: bob 0.9s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(7px); } }
+#add-home.glow { font-weight: 700; color: var(--ink); text-decoration: none; background: var(--finish-tint); border-radius: 6px; padding: 2px 6px; box-shadow: 0 0 0 2px var(--finish); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } .nudge-arrow { animation: none; } }
+</style>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span>Wall</span> <b>Rush</b></h1>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Opponent">
+        <button id="mode-cpu" type="button" aria-pressed="true">vs CPU</button>
+        <button id="mode-pvp" type="button" aria-pressed="false">2 Players</button>
+        <button id="mode-online" type="button" aria-pressed="false">Online</button>
+      </div>
+      <button id="my-ball" class="btn" type="button"><span class="ball-dot" id="my-ball-dot"></span>My ball</button>
+      <button id="new" class="btn" type="button">New game</button>
+    </div>
+  </header>
+
+  <div class="match-bar" id="match-bar">
+    <span class="match-mode" id="match-mode">Race</span>
+    <span class="match-score" id="match-score"></span>
+    <button id="match-leave" class="btn" type="button">Leave</button>
+  </div>
+
+  <div class="invite-banner" id="invite" role="status" hidden>
+    <span id="invite-text"></span>
+    <button id="invite-join" class="btn primary" type="button">Join</button>
+    <button id="invite-dismiss" class="btn" type="button">Not now</button>
+  </div>
+
+  <section class="name-screen" id="name-screen" hidden>
+    <div class="lobby-card">
+      <h2>What should rivals call you?</h2>
+      <p class="lede">Your name and your head-to-head records are saved in this browser, so they're still here next time you open the game.</p>
+      <form id="name-form" class="join">
+        <label for="name-input" class="sr">Your name</label>
+        <input id="name-input" maxlength="16" placeholder="Your name" autocomplete="nickname">
+        <button class="btn primary" type="submit">Start playing</button>
+      </form>
+      <p class="lobby-msg" id="name-msg" role="status"></p>
+    </div>
+  </section>
+
+  <section class="style-screen" id="style-screen" hidden>
+    <div class="lobby-card">
+      <h2>Style your ball</h2>
+      <canvas class="style-preview" id="style-preview" aria-label="Preview of your ball"></canvas>
+      <h3>Color</h3>
+      <div class="swatches" id="swatches"></div>
+      <h3>Face</h3>
+      <div class="tiles" id="faces"></div>
+      <h3>Hat</h3>
+      <div class="tiles" id="tops"></div>
+      <div class="coach-actions">
+        <button id="style-save" class="btn primary" type="button">Save</button>
+        <button id="style-cancel" class="btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="install" id="install" hidden>
+    <div class="lobby-card">
+      <h2>Put Wall Rush on your home screen</h2>
+      <p class="lede">It opens full screen like an app, so starting a game is one tap away.</p>
+      <div><button id="install-now" class="btn primary" type="button" hidden>Install Wall Rush</button></div>
+      <div id="install-steps"></div>
+      <p class="install-note" id="install-note" hidden></p>
+      <div class="coach-actions">
+        <button id="install-done" class="btn primary" type="button">Done</button>
+        <button id="install-later" class="btn" type="button">Maybe later</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="coach" id="coach" hidden>
+    <div class="coach-head"><div class="coach-step" id="coach-step">Training</div><div class="coach-dots" id="coach-dots"></div></div>
+    <h2 class="coach-title" id="coach-title"></h2>
+    <p class="coach-text" id="coach-text"></p>
+    <p class="coach-hint" id="coach-hint" role="status" hidden></p>
+    <canvas class="coach-reward" id="coach-reward" aria-label="Your ball wearing the graduation cap" hidden></canvas>
+    <div class="coach-actions">
+      <button id="coach-next" class="btn primary" type="button" hidden>Next</button>
+      <button id="coach-keep" class="btn" type="button" hidden>Keep my look</button>
+    </div>
+  </section>
+
+  <div class="variant-row" id="variant-row">
+    <div class="seg" role="group" aria-label="Game type">
+      <button id="v-race" type="button" aria-pressed="true">Race</button>
+      <button id="v-faceoff" type="button" aria-pressed="false">Face-off</button>
+    </div>
+  </div>
+
+  <section class="lobby" id="lobby" hidden>
+    <div class="lobby-card">
+      <p class="me-line">Playing as <strong id="me-name"></strong> · <button class="link" id="edit-name" type="button">Change name</button></p>
+      <h2>Play someone online</h2>
+      <p class="lede" id="lobby-note">Create a game and send the link to a friend. They just open it and they're in. No sign-up needed.</p>
+      <div class="lobby-actions">
+        <button id="create" class="btn primary" type="button">Create game</button>
+        <form id="join-form" class="join">
+          <label for="join-code" class="sr">Game code</label>
+          <input id="join-code" placeholder="Game code" maxlength="5" autocomplete="off" spellcheck="false">
+          <button class="btn" type="submit">Join</button>
+        </form>
+        <button id="paste-invite" class="btn" type="button" hidden>Paste invite</button>
+      </div>
+      <p class="lobby-msg" id="lobby-msg" role="status"></p>
+    </div>
+    <div class="lobby-card" id="rivals-card" hidden>
+      <h3>Your rivalries</h3>
+      <ul class="games" id="rivals"></ul>
+    </div>
+  </section>
+
+  <div class="gamebar" id="gamebar" hidden>
+    <div class="code">Game <strong id="game-code">-----</strong></div>
+    <div class="gamebar-actions">
+      <button id="copy-link" class="btn primary" type="button">Send invite link</button>
+      <button id="leave" class="btn" type="button">Leave</button>
+    </div>
+    <input id="link-fallback" class="link-fallback" readonly hidden aria-label="Invite link">
+  </div>
+  <div class="rivalry" id="rivalry" hidden></div>
+
+  <div class="finish-label" id="finish-label"><span class="flag" aria-hidden="true"></span><span id="finish-top-text">Finish</span></div>
+
+  <div class="bezel" id="bezel">
+    <canvas id="board" aria-label="Wall Rush board. Use arrow keys to move your ball."></canvas>
+    <div class="countdown" id="countdown" hidden><span id="countdown-num">3</span></div>
+    <div class="overlay" id="overlay" hidden>
+      <div class="card">
+        <div class="who" id="win-who">Blue wins</div>
+        <div class="sub" id="win-sub">Reached the finish first.</div>
+        <p class="msg" id="rematch-msg" hidden></p>
+        <div class="actions">
+          <button id="again" class="btn primary" type="button">Play again</button>
+          <button id="again-other" class="btn" type="button">Play Face-off</button>
+          <button id="leave-game" class="btn" type="button" hidden>Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finish-label" id="finish-label-bottom" hidden><span class="flag" aria-hidden="true"></span><span id="finish-bottom-text">Finish</span></div>
+
+  <div class="players">
+    <div class="player blue" id="p-blue"><span class="turn"></span><span class="dot"></span><span id="name-blue">You</span><span class="pips" id="pips-blue"></span></div>
+    <div class="player red" id="p-red"><span class="pips" id="pips-red"></span><span id="name-red">CPU</span><span class="dot"></span><span class="turn"></span></div>
+  </div>
+  <p class="status" id="status"></p>
+  <div class="wall-confirm" id="wall-confirm" hidden>
+    <button id="place-wall" class="btn primary" type="button">Place wall</button>
+    <button id="cancel-wall" class="btn" type="button">Cancel</button>
+  </div>
+  <div class="nudge-wrap" id="nudge" hidden>
+    <div class="nudge">
+      <p>Add Wall Rush to your home screen to save your rivalries forever.</p>
+      <div class="coach-actions">
+        <button id="nudge-go" class="btn" type="button">Show me how</button>
+        <button id="nudge-close" class="link" type="button">Not now</button>
+      </div>
+    </div>
+    <svg class="nudge-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15"/><path d="M5 12l7 7 7-7"/></svg>
+  </div>
+  <p class="version"><button class="link" id="how-to" type="button">How to play</button> · <button class="link" id="add-home" type="button">Add to home screen</button> · Version 12</p>
+</div>
+
+<script>
+const COLS = 9, ROWS = 13, WALLS = 10;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let mode = "cpu";
+let state, history, hover = null, cpuTimer = null;
+const anim = { blue: null, red: null, drop: null };
+// "race": both start at the bottom and race to the top. "faceoff": start on opposite sides, each racing to the far side.
+let variant = loadJSON("wallrush-variant", "race") === "faceoff" ? "faceoff" : "race";
+
+function freshState(v = variant) {
+  const face = v === "faceoff";
+  return {
+    variant: face ? "faceoff" : "race",
+    pos: face ? { blue: { r: ROWS - 1, c: 4 }, red: { r: 0, c: 4 } } : { blue: { r: ROWS - 1, c: 2 }, red: { r: ROWS - 1, c: COLS - 3 } },
+    walls: [], turn: "blue", left: { blue: WALLS, red: WALLS }, winner: null,
+  };
+}
+// The row each player must reach.
+const goalRow = (s, p) => (s.variant === "faceoff" && p === "red" ? ROWS - 1 : 0);
+const other = p => (p === "blue" ? "red" : "blue");
+const clone = s => JSON.parse(JSON.stringify(s));
+
+/* ---------- rules ---------- */
+// Horizontal wall {o:'h', r, c}: on the line above row r, covering columns c and c+1.
+// Vertical wall {o:'v', r, c}: on the line left of column c, covering rows r and r+1.
+function blockedSet(walls) {
+  const s = new Set();
+  for (const w of walls) {
+    if (w.o === "h") { s.add(`h${w.r},${w.c}`); s.add(`h${w.r},${w.c + 1}`); }
+    else { s.add(`v${w.r},${w.c}`); s.add(`v${w.r + 1},${w.c}`); }
+  }
+  return s;
+}
+function canStep(bs, r, c, dr, dc) {
+  const nr = r + dr, nc = c + dc;
+  if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) return false;
+  if (dr === -1) return !bs.has(`h${r},${c}`);
+  if (dr === 1) return !bs.has(`h${r + 1},${c}`);
+  if (dc === -1) return !bs.has(`v${r},${c}`);
+  return !bs.has(`v${r},${c + 1}`);
+}
+const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]];
+// Distance from every cell to a finish row.
+function distMap(bs, goal = 0) {
+  const d = Array.from({ length: ROWS }, () => Array(COLS).fill(Infinity));
+  const q = [];
+  for (let c = 0; c < COLS; c++) { d[goal][c] = 0; q.push([goal, c]); }
+  for (let i = 0; i < q.length; i++) {
+    const [r, c] = q[i];
+    for (const [dr, dc] of DIRS) {
+      if (!canStep(bs, r, c, dr, dc)) continue;
+      const nr = r + dr, nc = c + dc;
+      if (d[nr][nc] > d[r][c] + 1) { d[nr][nc] = d[r][c] + 1; q.push([nr, nc]); }
+    }
+  }
+  return d;
+}
+function wallInBounds(w) {
+  return w.o === "h" ? w.r >= 1 && w.r <= ROWS - 1 && w.c >= 0 && w.c <= COLS - 2
+                     : w.r >= 0 && w.r <= ROWS - 2 && w.c >= 1 && w.c <= COLS - 1;
+}
+function wallConflicts(walls, w) {
+  for (const x of walls) {
+    if (x.o === w.o) {
+      if (w.o === "h" && x.r === w.r && Math.abs(x.c - w.c) <= 1) return true;
+      if (w.o === "v" && x.c === w.c && Math.abs(x.r - w.r) <= 1) return true;
+    } else {
+      const h = w.o === "h" ? w : x, v = w.o === "h" ? x : w;
+      if (v.c === h.c + 1 && v.r === h.r - 1) return true; // cross at the same midpoint
+    }
+  }
+  return false;
+}
+// Returns null if legal, or a reason string.
+function wallProblem(s, w) {
+  if (!wallInBounds(w)) return "edge";
+  if (s.left[s.turn] <= 0) return "No walls left.";
+  if (wallConflicts(s.walls, w)) return "That spot overlaps another wall.";
+  const bs = blockedSet([...s.walls, w]), gb = goalRow(s, "blue"), gr = goalRow(s, "red");
+  const db = distMap(bs, gb), dr = gr === gb ? db : distMap(bs, gr);
+  if (db[s.pos.blue.r][s.pos.blue.c] === Infinity || dr[s.pos.red.r][s.pos.red.c] === Infinity)
+    return "Walls can't seal anyone off from the finish.";
+  return null;
+}
+function legalMoves(s, p) {
+  const bs = blockedSet(s.walls), { r, c } = s.pos[p];
+  return DIRS.filter(([dr, dc]) => canStep(bs, r, c, dr, dc)).map(([dr, dc]) => ({ r: r + dr, c: c + dc }));
+}
+
+/* ---------- actions ---------- */
+function commit(next) {
+  if (!next.winner) next.turn = other(state.turn);
+  if (mode === "tutorial") { next.turn = "blue"; next.winner = null; state = next; hover = null; render(); tutorialEvent(); return; }
+  if (mode === "online") { state = next; hover = null; pushOnline(next); render(); return; }
+  history.push(state);
+  state = next;
+  hover = null;
+  render();
+  scheduleCpu();
+}
+function doMove(to) {
+  lastAction = "move";
+  const p = state.turn, next = clone(state);
+  anim[p] = { from: { ...state.pos[p] }, t0: performance.now() };
+  next.pos[p] = to;
+  if (to.r === goalRow(state, p)) next.winner = p;
+  commit(next);
+}
+function doWall(w) {
+  lastAction = "wall";
+  const next = clone(state);
+  next.walls.push({ ...w, p: state.turn });
+  next.left[state.turn]--;
+  anim.drop = { key: wallKey(w), t0: performance.now() };
+  commit(next);
+}
+const wallKey = w => `${w.o}${w.r},${w.c}`;
+
+/* ---------- CPU ---------- */
+// The CPU looks one reply ahead: for each of its moves and useful walls, it assumes you answer with
+// your best move or your most damaging wall, and picks the option that leaves it best placed.
+function quickApply(s, p, a) {
+  const n = { ...s, pos: { blue: { ...s.pos.blue }, red: { ...s.pos.red } }, left: { ...s.left }, turn: other(p) };
+  if (a.type === "move") { n.pos[p] = a.to; if (a.to.r === goalRow(s, p)) n.winner = p; }
+  else { n.walls = [...s.walls, { ...a.w, p }]; n.left[p]--; }
+  return n;
+}
+function dists(s) {
+  const bs = blockedSet(s.walls), gb = goalRow(s, "blue"), gr = goalRow(s, "red");
+  const mb = distMap(bs, gb), mr = gr === gb ? mb : distMap(bs, gr);
+  return { blue: mb[s.pos.blue.r][s.pos.blue.c], red: mr[s.pos.red.r][s.pos.red.c], map: { blue: mb, red: mr } };
+}
+// How good a position is for `me`: being closer than the opponent, having the next turn, and walls in hand.
+function evaluate(s, me) {
+  const op = other(me);
+  if (s.winner === me) return 1000;
+  if (s.winner === op) return -1000;
+  const d = dists(s);
+  return d[op] - d[me] + (s.turn === me ? 0.5 : -0.5) + 0.12 * (s.left[me] - s.left[op]);
+}
+// Legal walls that cut a step on one of the target player's shortest routes, most damaging first.
+function blockingWalls(s, target, d) {
+  if (s.left[s.turn] <= 0) return [];
+  const map = d.map[target], seen = new Set(), cand = new Map();
+  const q = [s.pos[target]];
+  seen.add(`${s.pos[target].r},${s.pos[target].c}`);
+  const add = w => { const k = wallKey(w); if (!cand.has(k) && wallInBounds(w) && !wallConflicts(s.walls, w)) cand.set(k, w); };
+  const bs = blockedSet(s.walls);
+  for (let i = 0; i < q.length && i < 60; i++) {
+    const { r, c } = q[i];
+    for (const [dr, dc] of DIRS) {
+      if (!canStep(bs, r, c, dr, dc) || map[r + dr][c + dc] !== map[r][c] - 1) continue;
+      if (dr === -1) { add({ o: "h", r, c }); add({ o: "h", r, c: c - 1 }); }
+      else if (dr === 1) { add({ o: "h", r: r + 1, c }); add({ o: "h", r: r + 1, c: c - 1 }); }
+      else if (dc === -1) { add({ o: "v", r, c }); add({ o: "v", r: r - 1, c }); }
+      else { add({ o: "v", r, c: c + 1 }); add({ o: "v", r: r - 1, c: c + 1 }); }
+      const k = `${r + dr},${c + dc}`;
+      if (!seen.has(k)) { seen.add(k); q.push({ r: r + dr, c: c + dc }); }
+    }
+  }
+  const out = [];
+  for (const w of cand.values()) {
+    const dd = dists(quickApply(s, s.turn, { type: "wall", w }));
+    if (dd.blue === Infinity || dd.red === Infinity) continue; // walls can't seal anyone off
+    out.push({ w, gain: dd[target] - d[target] });
+  }
+  return out.filter(x => x.gain > 0).sort((a, b) => b.gain - a.gain).map(x => x.w);
+}
+function bestReplyValue(s1, me) {
+  const op = other(me), d1 = dists(s1);
+  const replies = legalMoves(s1, op).filter(to => d1.map[op][to.r][to.c] < d1[op]).map(to => ({ type: "move", to }));
+  if (!replies.length) replies.push(...legalMoves(s1, op).map(to => ({ type: "move", to })));
+  replies.push(...blockingWalls(s1, me, d1).slice(0, 12).map(w => ({ type: "wall", w })));
+  let v = Infinity;
+  for (const b of replies) v = Math.min(v, evaluate(quickApply(s1, op, b), me));
+  return v;
+}
+function cpuTurn(s) {
+  const me = "red", op = "blue", d0 = dists(s);
+  const opts = legalMoves(s, me).map(to => ({ type: "move", to }));
+  opts.push(...blockingWalls(s, op, d0).slice(0, 24).map(w => ({ type: "wall", w })));
+  let best = null;
+  for (const a of opts) {
+    const s1 = quickApply(s, me, a);
+    const v = (s1.winner === me ? 1e4 : bestReplyValue(s1, me)) + Math.random() * 0.05;
+    if (!best || v > best.v) best = { a, v };
+  }
+  return best.a;
+}
+function scheduleCpu() {
+  clearTimeout(cpuTimer);
+  if (mode !== "cpu" || state.winner || state.turn !== "red") return;
+  cpuTimer = setTimeout(() => {
+    const a = cpuTurn(state);
+    a.type === "wall" ? doWall(a.w) : doMove(a.to);
+  }, 520);
+}
+function humanTurn() {
+  if (state.winner || screen !== "game") return false;
+  if (mode === "tutorial") return !!tut && !tut.won && !tut.reward && state.turn === "blue";
+  if (mode === "online") {
+    const g = online.game;
+    if (countdown) return false; // nobody moves until "Go!"
+    return !!(g && online.role && g.players.blue && g.players.red && state.turn === online.role);
+  }
+  return mode === "pvp" || state.turn === "blue";
+}
+
+/* ---------- online ---------- */
+// Both players talk through a free public message server. It keeps the latest game state,
+// so a phone that locks its screen or switches apps catches up when it comes back.
+const BROKER = "wss://broker.hivemq.com:8884/mqtt";
+const T = "wallrush/v4";
+const stateTopic = code => `${T}/g/${code}/state`;
+const presTopic = id => `${T}/p/${id}`;
+const invTopic = id => `${T}/inv/${id}`;
+const online = { invited: null, client: null, up: false, me: null, code: null, role: null, game: null, presence: {}, watching: new Set(), joinTimer: null, claimTimer: null };
+const myColor = () => online.role;
+
+/* ---------- profile and rivalry records (saved in this browser) ---------- */
+function loadJSON(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+const cleanName = n => String(n || "").replace(/\s+/g, " ").trim().slice(0, 16);
+const profile = loadJSON("wallrush-profile", null) || {};
+if (!/^[a-z0-9]{8,16}$/.test(profile.id || "")) profile.id = Math.random().toString(36).slice(2, 12).padEnd(10, "0");
+profile.name = cleanName(profile.name);
+saveJSON("wallrush-profile", profile);
+const myId = () => profile.id;
+const PALETTE = {
+  blue: { name: "Blue", base: "#2f5fe0", hi: "#8fb0ff" },
+  red: { name: "Red", base: "#dc2f45", hi: "#ff9aa6" },
+  green: { name: "Green", base: "#1f9d55", hi: "#86e3a8" },
+  pink: { name: "Pink", base: "#e64a9c", hi: "#ffb3da" },
+  purple: { name: "Purple", base: "#7c4ddb", hi: "#c4adff" },
+  yellow: { name: "Yellow", base: "#e8b10e", hi: "#fff0a3" },
+  orange: { name: "Orange", base: "#f06a1d", hi: "#ffc08f" },
+  teal: { name: "Teal", base: "#0f9a95", hi: "#8ee8e2" },
+  sky: { name: "Sky", base: "#2aa3e0", hi: "#a8e1ff" },
+  brown: { name: "Brown", base: "#8a5a2e", hi: "#d9ae84", dark: true },
+  silver: { name: "Silver", base: "#8d97a8", hi: "#e6ebf3" },
+  black: { name: "Black", base: "#20232b", hi: "#6b7280", dark: true },
+};
+const FACES = { none: "None", smile: "Smile", grin: "Grin", wink: "Wink", cool: "Shades", shock: "Wow", stache: "Mustache" };
+const TOPS = { none: "None", party: "Party hat", crown: "Crown", tophat: "Top hat", bow: "Bow", ears: "Cat ears", cap: "Cap", halo: "Halo", grad: "Grad cap" };
+const validLook = (l, color) => ({
+  color: l && PALETTE[l.color] ? l.color : color,
+  face: l && FACES[l.face] ? l.face : "none",
+  top: l && TOPS[l.top] ? l.top : "none",
+});
+profile.look = validLook(profile.look, "blue");
+saveJSON("wallrush-profile", profile);
+let records = loadJSON("wallrush-records", {});
+const pairKey = (a, b) => [a, b].sort().join("-");
+const recTopic = key => `${T}/r/${key}`;
+// Face-off results are stored with a "-f" on the end of the game key, so each mode keeps its own score.
+// (Games from before this change have no marker and count as Race.)
+const isFaceoffKey = k => k.endsWith("-f");
+function tally(rec, me, v = "race") {
+  let mine = 0, theirs = 0;
+  for (const [k, w] of Object.entries((rec && rec.results) || {}))
+    if (isFaceoffKey(k) === (v === "faceoff")) w === me ? mine++ : theirs++;
+  return { mine, theirs };
+}
+// Results are keyed by game, so merging copies from both players never double counts.
+function mergeRecord(key, inc) {
+  const ids = key.split("-");
+  const cur = records[key] || { ids, names: {}, results: {} };
+  let changed = !records[key];
+  for (const [k, w] of Object.entries(inc.results || {}))
+    if (!(k in cur.results) && ids.includes(w) && /^[A-Z0-9]{5}-\d{1,4}(-f)?$/.test(k)) { cur.results[k] = w; changed = true; }
+  for (const [id, n] of Object.entries(inc.names || {}))
+    if (ids.includes(id) && cleanName(n) && cur.names[id] !== cleanName(n)) { cur.names[id] = cleanName(n); changed = true; }
+  records[key] = cur;
+  if (changed) saveJSON("wallrush-records", records);
+  return changed;
+}
+function shareRecord(key) {
+  if (online.client && records[key]) online.client.publish(recTopic(key), JSON.stringify(records[key]), { qos: 1, retain: true });
+}
+const watchingRec = new Set();
+function syncRecord(g) {
+  const a = g.players.blue, b = g.players.red, me = online.me;
+  if (!a || !b || (a !== me && b !== me)) return;
+  const key = pairKey(a, b);
+  const gameKey = `${g.code}-${g.round || 1}${g.state.variant === "faceoff" ? "-f" : ""}`;
+  const results = g.state.winner ? { [gameKey]: g.players[g.state.winner] } : {};
+  if (mergeRecord(key, { names: g.names || {}, results }) && g.state.winner) shareRecord(key);
+  if (online.client && !watchingRec.has(key)) { watchingRec.add(key); online.client.subscribe(recTopic(key), { qos: 1 }); }
+}
+function onRecord(key, msg) {
+  if (!msg || typeof msg.results !== "object" || !key.split("-").includes(online.me)) return;
+  mergeRecord(key, msg);
+  const local = Object.keys(records[key].results), remote = Object.keys(msg.results);
+  if (local.some(k => !remote.includes(k))) shareRecord(key); // fill in the server copy
+  render();
+}
+const nameFor = id => id === online.me ? "You" : cleanName(online.game && online.game.names && online.game.names[id]) || "Friend";
+function rivalryText() {
+  const g = online.game;
+  if (!g || !online.role) return "";
+  const them = g.players[other(online.role)];
+  if (!them) return "";
+  const v = g.state.variant === "faceoff" ? "faceoff" : "race", label = v === "faceoff" ? "Face-off" : "Race";
+  const { mine, theirs } = tally(records[pairKey(online.me, them)], online.me, v);
+  return mine + theirs ? `${label}: You ${mine} – ${theirs} ${nameFor(them)}` : `First ${label} game against ${nameFor(them)}. Good luck!`;
+}
+function lobbyMsg(text) { $("lobby-msg").textContent = text || ""; }
+function genCode() {
+  const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 5 }, () => A[Math.floor(Math.random() * A.length)]).join("");
+}
+function setHash(code) {
+  try { window.history.replaceState(null, "", code ? "#" + code : location.pathname + location.search); } catch (e) {}
+}
+const inviteLink = () => location.origin + location.pathname + "#" + online.code;
+const okPos = p => p && Number.isInteger(p.r) && Number.isInteger(p.c) && p.r >= 0 && p.r < ROWS && p.c >= 0 && p.c < COLS;
+function validState(x) {
+  return !!(x && x.pos && okPos(x.pos.blue) && okPos(x.pos.red) && Array.isArray(x.walls) && x.walls.length <= 2 * WALLS &&
+    x.walls.every(w => w && (w.o === "h" || w.o === "v") && Number.isInteger(w.r) && Number.isInteger(w.c) && (w.p === "blue" || w.p === "red")) &&
+    x.left && (x.turn === "blue" || x.turn === "red") && (x.winner === null || x.winner === "blue" || x.winner === "red") &&
+    (x.variant === undefined || x.variant === "race" || x.variant === "faceoff"));
+}
+const validGame = g => !!(g && g.v === 4 && typeof g.code === "string" && Number.isInteger(g.seq) && g.players && validState(g.state));
+
+function connect() {
+  if (online.client) return true;
+  if (!window.mqtt) { lobbyMsg("Online play couldn't load. Check your connection and reload the page."); return false; }
+  const c = mqtt.connect(BROKER, {
+    clientId: "wr_" + online.me + "_" + Math.random().toString(36).slice(2, 6),
+    keepalive: 20, reconnectPeriod: 1500, connectTimeout: 10000, clean: true,
+    will: { topic: presTopic(online.me), payload: JSON.stringify({ online: false }), qos: 1, retain: true },
+  });
+  online.client = c;
+  c.subscribe(invTopic(online.me), { qos: 1 });
+  c.on("connect", () => {
+    online.up = true; online.upAt = Date.now();
+    c.publish(presTopic(online.me), JSON.stringify({ online: true }), { qos: 1, retain: true });
+    resubscribeAll();
+    render();
+  });
+  // A late "close" from an abandoned attempt can arrive after a new connection opens, so ask the client.
+  c.on("offline", () => { online.up = c.connected; render(); });
+  c.on("close", () => { online.up = c.connected; render(); });
+  c.on("error", () => {});
+  c.on("message", (topic, buf) => {
+    let msg; try { msg = JSON.parse(buf.toString()); } catch (e) { return; }
+    if (topic === invTopic(online.me)) onInvite(msg);
+    else if (online.code && topic === stateTopic(online.code)) onGame(msg);
+    else if (topic.startsWith(T + "/p/")) { online.presence[topic.slice(T.length + 3)] = !!(msg && msg.online); render(); }
+    else if (topic.startsWith(T + "/r/")) onRecord(topic.slice(T.length + 3), msg);
+    else if (topic.startsWith(T + "/x/")) onTransfer(topic.slice(T.length + 3), msg);
+  });
+  return true;
+}
+// Invites go straight to a rival's app, so they can join without a link or a code.
+let invite = null;
+function onInvite(msg) {
+  if (!msg || typeof msg.from !== "string" || msg.from === online.me || !/^[A-Z0-9]{5}$/.test(msg.code || "")) return;
+  if (Date.now() - (Number(msg.ts) || 0) > 30 * 60 * 1000 || online.code === msg.code) return;
+  invite = { code: msg.code, name: cleanName(msg.fromName) || "A friend" };
+  render();
+}
+function clearInvite() {
+  invite = null;
+  if (online.client) online.client.publish(invTopic(online.me), "", { qos: 1, retain: true });
+  render();
+}
+function inviteRival(id, name) {
+  setMode("online");
+  hostGame();
+  if (!online.code) return;
+  online.client.publish(invTopic(id), JSON.stringify({ from: online.me, fromName: profile.name, code: online.code, ts: Date.now() }), { qos: 1, retain: true });
+  online.invited = name;
+  render();
+}
+async function pasteInvite() {
+  let text = "";
+  try { text = await navigator.clipboard.readText(); } catch (e) {}
+  const m = /#([A-Za-z0-9]{5})\b/.exec(text) || /^\s*([A-Za-z0-9]{5})\s*$/.exec(text) || /code:\s*([A-Za-z0-9]{5})\b/i.exec(text);
+  if (m) joinGame(m[1]);
+  else lobbyMsg("Couldn't find a game link on your clipboard. Copy the invite link first, or type the code.");
+}
+// Requests made while a connection is still starting can be dropped, so every time the connection
+// comes up, ask again for everything this page follows.
+function resubscribeAll() {
+  const c = online.client;
+  if (!c || !c.connected) return;
+  const topics = [invTopic(online.me)];
+  if (online.code) topics.push(stateTopic(online.code));
+  for (const id of online.watching) topics.push(presTopic(id));
+  for (const k of watchingRec) topics.push(recTopic(k));
+  if (importing) topics.push(transferTopic(importing));
+  c.subscribe(topics, { qos: 1 });
+}
+function publishGame(g) {
+  online.game = g;
+  online.lastPub = { g, t: Date.now() }; // resent if it doesn't come back from the server (see the watchdog)
+  if (online.client) online.client.publish(stateTopic(g.code), JSON.stringify(g), { qos: 1, retain: true });
+  syncRecord(g);
+}
+function watchPresence(g) {
+  for (const id of [g.players.blue, g.players.red])
+    if (id && id !== online.me && !online.watching.has(id)) { online.watching.add(id); online.client.subscribe(presTopic(id), { qos: 1 }); }
+}
+function hostGame() {
+  if (!connect()) return;
+  leaveGame(true);
+  const code = genCode();
+  online.code = code; online.role = "blue"; online.invited = null; online.heardSeq = 0; online.lastPub = null;
+  online.client.subscribe(stateTopic(code), { qos: 1 });
+  state = freshState(); hover = null;
+  publishGame({ v: 4, code, seq: 1, round: 1, players: { blue: online.me, red: null }, names: { [online.me]: profile.name }, looks: { [online.me]: profile.look }, state, ts: Date.now() });
+  setHash(code); lobbyMsg(""); render();
+}
+function joinGame(raw) {
+  const code = String(raw || "").trim().toUpperCase();
+  lobbyMsg("");
+  if (!/^[A-Z0-9]{5}$/.test(code)) { lobbyMsg("Game codes are 5 letters and numbers."); return; }
+  if (!connect()) return;
+  leaveGame(true);
+  online.code = code; online.role = null; online.heardSeq = 0; online.lastPub = null;
+  state = freshState(); hover = null; setHash(code);
+  online.client.subscribe(stateTopic(code), { qos: 1 });
+  armJoinTimer(code);
+  render();
+}
+// Only call a game missing after we've been connected for a few seconds without hearing about it.
+function armJoinTimer(code) {
+  clearTimeout(online.joinTimer);
+  online.joinTimer = setTimeout(() => {
+    if (online.code !== code || online.game) return;
+    if (!online.up || Date.now() - (online.upAt || 0) < 5000) { armJoinTimer(code); return; }
+    leaveGame(true);
+    lobbyMsg(`No game found with code ${code}. Check the code, or ask your friend to create a new game.`);
+    render();
+  }, 4000);
+}
+function onGame(g) {
+  if (!validGame(g) || g.code !== online.code) return;
+  online.heardSeq = Math.max(online.heardSeq || 0, g.seq);
+  if (online.game && g.seq < online.game.seq) return;
+  clearTimeout(online.joinTimer);
+  if (invite && invite.code === g.code) clearInvite();
+  const prev = state, next = clone(g.state), now = performance.now();
+  if (online.game) {
+    for (const p of ["blue", "red"])
+      if (prev.pos[p].r !== next.pos[p].r || prev.pos[p].c !== next.pos[p].c) anim[p] = { from: { ...prev.pos[p] }, t0: now };
+    const known = new Set(prev.walls.map(wallKey));
+    const added = next.walls.find(w => !known.has(wallKey(w)));
+    if (added) anim.drop = { key: wallKey(added), t0: now };
+  }
+  online.game = g; state = next;
+  if (hover && hover.type === "wall" && !humanTurn()) hover = null;
+  watchPresence(g);
+  syncRecord(g);
+  if (!online.role) claimSeat(false);
+  else if (g.players[online.role] !== online.me) {
+    if (g.players[online.role]) { leaveGame(true); lobbyMsg("Someone else took your place in that game."); }
+    else publishGame({ ...g, seq: g.seq + 1, players: { ...g.players, [online.role]: online.me }, names: { ...g.names, [online.me]: profile.name }, looks: { ...g.looks, [online.me]: profile.look }, ts: Date.now() });
+  }
+  render();
+}
+// Take a seat: your own, an empty one, or one whose player has gone offline.
+function claimSeat(final) {
+  const g = online.game, me = online.me;
+  if (!g) return;
+  const take = role => {
+    online.role = role;
+    publishGame({ ...g, seq: g.seq + 1, players: { ...g.players, [role]: me }, names: { ...g.names, [me]: profile.name }, looks: { ...g.looks, [me]: profile.look }, ts: Date.now() });
+    render();
+  };
+  if (g.players.blue === me) { online.role = "blue"; return; }
+  if (g.players.red === me) { online.role = "red"; return; }
+  if (!g.players.red) return take("red");
+  const away = id => online.presence[id] === false || (final && online.presence[id] === undefined);
+  if (away(g.players.red)) return take("red");
+  if (away(g.players.blue)) return take("blue");
+  if (!final) { clearTimeout(online.claimTimer); online.claimTimer = setTimeout(() => { if (!online.role) claimSeat(true); }, 2500); return; }
+  leaveGame(true);
+  lobbyMsg("That game already has two players. Create your own game instead.");
+  render();
+}
+function pushOnline(next) {
+  const g = online.game;
+  if (!g) return;
+  publishGame({ ...g, seq: g.seq + 1, state: next, ts: Date.now() });
+}
+const modeLabel = v => (v === "faceoff" ? "Face-off" : "Race");
+const otherMode = v => (v === "faceoff" ? "race" : "faceoff");
+// Start the next round, in the same mode or the one that was asked for.
+function rematch(v = state.variant || "race") {
+  if (!online.game) return;
+  variant = v === "faceoff" ? "faceoff" : "race"; saveJSON("wallrush-variant", variant);
+  const next = freshState(variant);
+  next.turn = state.winner ? other(state.winner) : "blue"; // whoever lost goes first
+  state = next; hover = null; anim.blue = anim.red = anim.drop = null;
+  const g = online.game;
+  publishGame({ ...g, seq: g.seq + 1, round: (g.round || 1) + 1, rematch: null, state: next, ts: Date.now() });
+  render();
+}
+// The current round's rematch request, if any: { by, round, declined, variant }.
+function rematchState() {
+  const g = online.game, r = g && g.rematch;
+  return r && typeof r.by === "string" && r.round === (g.round || 1) ? r : null;
+}
+const askedMode = r => (r && (r.variant === "faceoff" || r.variant === "race") ? r.variant : state.variant || "race");
+function requestRematch(v = state.variant || "race") {
+  const g = online.game, r = rematchState();
+  if (!g || !online.role) return;
+  if (r && r.by !== online.me && !r.declined) { rematch(askedMode(r)); return; } // they asked first, so this accepts
+  if (r && r.by === online.me) return;
+  publishGame({ ...g, seq: g.seq + 1, rematch: { by: online.me, round: g.round || 1, declined: false, variant: v }, ts: Date.now() });
+  render();
+}
+function leaveAfterGame() {
+  const g = online.game, r = rematchState();
+  if (g && r && r.by !== online.me && !r.declined) publishGame({ ...g, seq: g.seq + 1, rematch: { ...r, declined: true, declinedBy: online.me }, ts: Date.now() });
+  leaveGame();
+}
+// quiet: switching games, so keep the lobby message and don't redraw yet.
+function leaveGame(quiet) {
+  clearTimeout(online.joinTimer); clearTimeout(online.claimTimer);
+  const g = online.game, code = online.code;
+  if (online.client && code) {
+    if (g && online.role && g.players[online.role] === online.me)
+      publishGame({ ...g, seq: g.seq + 1, players: { ...g.players, [online.role]: null }, ts: Date.now() });
+    online.client.unsubscribe(stateTopic(code));
+  }
+  online.code = null; online.role = null; online.game = null; online.heardSeq = 0; online.lastPub = null;
+  if (quiet === true) return;
+  setHash("");
+  state = freshState(); hover = null;
+  render();
+}
+function renderLobby() {
+  $("me-name").textContent = profile.name;
+  const me = profile.id;
+  const list = Object.values(records).filter(r => r.ids && r.ids.includes(me)).map(r => {
+    const them = r.ids.find(i => i !== me);
+    const race = tally(r, me, "race"), face = tally(r, me, "faceoff");
+    return { id: them, name: r.names[them] || "Friend", race, face, total: race.mine + race.theirs + face.mine + face.theirs };
+  }).filter(x => x.total > 0).sort((a, b) => b.total - a.total).slice(0, 8);
+  $("rivals-card").hidden = !list.length;
+  $("rivals").replaceChildren(...list.map(x => {
+    const li = document.createElement("li");
+    const who = document.createElement("span"); who.className = "who"; who.textContent = x.name;
+    const sc = document.createElement("span"); sc.className = "score";
+    const part = (label, t) => (t.mine + t.theirs ? `${label} ${t.mine}–${t.theirs}` : "");
+    sc.textContent = "You: " + [part("Race", x.race), part("Face-off", x.face)].filter(Boolean).join(" · ");
+    const inv = document.createElement("button"); inv.className = "btn"; inv.type = "button"; inv.textContent = "Invite";
+    inv.onclick = () => inviteRival(x.id, x.name);
+    const info = document.createElement("div"); info.className = "info"; info.append(who, sc);
+    li.append(info, inv);
+    return li;
+  }));
+  const ok = !!window.mqtt;
+  $("paste-invite").hidden = !(navigator.clipboard && navigator.clipboard.readText);
+  $("create").disabled = !ok;
+  if (!ok) $("lobby-note").textContent = "Online play couldn't load. Check your connection and reload the page.";
+}
+async function copyLink() {
+  const url = inviteLink(), btn = $("copy-link"), fb = $("link-fallback");
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+    try { await navigator.share({ title: "Wall Rush", text: `Play Wall Rush with me! Game code: ${online.code}`, url }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = "Link copied";
+    setTimeout(() => { btn.textContent = "Send invite link"; }, 1800);
+  } catch (e) {
+    fb.value = url; fb.hidden = false; fb.focus(); fb.select();
+  }
+}
+const launchedFromInstall = () => isStandalone() && new URLSearchParams(location.search).has("x");
+function initOnline() {
+  if (launchedFromInstall()) return;
+  const m = /^#([A-Za-z0-9]{5})$/.exec(location.hash || "");
+  if (!m) return;
+  setMode("online");
+  joinGame(m[1]); // also how the host gets back in after a reload: their seat is kept
+}
+window.addEventListener("hashchange", () => {
+  const m = /^#([A-Za-z0-9]{5})$/.exec(location.hash || "");
+  if (m && m[1].toUpperCase() !== online.code) { setMode("online"); joinGame(m[1]); }
+});
+// A connection whose first attempt fails can stop retrying on its own. If it has been down for
+// more than 10 seconds and isn't retrying, restart it. This also keeps the "connected" flag honest.
+setInterval(() => {
+  const c = online.client, was = online.up;
+  if (!c) return;
+  if (c.connected) {
+    online.downSince = 0; online.up = true; if (!online.upAt) online.upAt = Date.now();
+    // A connection can die quietly (a phone pausing the page, a network switch) while still saying it's
+    // connected. If messages sit unsent for more than 6 seconds, drop it; it reconnects and resends them.
+    const stuck = Object.keys(c.outgoing || {}).length + (c.queue || []).length;
+    if (!stuck) online.stuckSince = 0;
+    else if (!online.stuckSince) online.stuckSince = Date.now();
+    else if (Date.now() - online.stuckSince > 6000) {
+      online.stuckSince = 0;
+      try { c.stream.destroy(); } catch (e) { c.reconnect(); }
+      return;
+    }
+    // During a game, check in every 8 seconds so a dead connection is noticed even while just waiting.
+    if (online.code && Date.now() - (online.lastBeat || 0) > 8000) {
+      online.lastBeat = Date.now();
+      c.publish(presTopic(online.me), JSON.stringify({ online: true }), { qos: 1, retain: true });
+    }
+    // Our last update never came back from the server: send it again (only if nothing newer arrived).
+    const lp = online.lastPub;
+    if (lp && lp.g.code === online.code && (online.heardSeq || 0) < lp.g.seq && Date.now() - lp.t > 4000) {
+      lp.t = Date.now();
+      c.publish(stateTopic(lp.g.code), JSON.stringify(lp.g), { qos: 1, retain: true });
+    }
+    // Still waiting to hear about the game we opened: ask again.
+    if (online.code && !online.game) c.subscribe(stateTopic(online.code), { qos: 1 });
+  }
+  else {
+    online.up = false;
+    if (!online.downSince) online.downSince = Date.now();
+    else if (!c.reconnecting && Date.now() - online.downSince > 10000) { online.downSince = Date.now(); c.reconnect(); }
+  }
+  if (was !== online.up) render();
+}, 3000);
+// Phones pause background tabs. When the game comes back on screen, reconnect right away.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && online.client && !online.client.connected) online.client.reconnect();
+});
+
+/* ---------- ball looks ---------- */
+function rawSeatLook(p) {
+  if (mode === "online" && online.game) {
+    const id = online.game.players[p], looks = online.game.looks || {};
+    return validLook(id && looks[id], p === "blue" ? "blue" : "red");
+  }
+  return p === "blue" ? profile.look : validLook(null, "red"); // the CPU or the second local player
+}
+// If both players pick the same color, the red seat switches so the balls stay easy to tell apart.
+function seatLook(p) {
+  const look = rawSeatLook(p);
+  if (p === "red") {
+    const b = rawSeatLook("blue").color;
+    if (b === look.color) return { ...look, color: b === "red" ? "blue" : "red" };
+  }
+  return look;
+}
+const seatColor = p => PALETTE[seatLook(p).color];
+let draftLook = null;
+function showStyle() {
+  draftLook = { ...profile.look };
+  screen = "style";
+  renderStyle(); render();
+  window.scrollTo(0, 0);
+}
+function sizedCanvas(cv2, size) {
+  const dpr = window.devicePixelRatio || 1;
+  cv2.width = cv2.height = size * dpr; cv2.style.width = cv2.style.height = size + "px";
+  const g = cv2.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, size, size);
+  return g;
+}
+function renderStyle() {
+  drawBallOn(sizedCanvas($("style-preview"), 150), 75, 92, 40, draftLook);
+  $("swatches").replaceChildren(...Object.entries(PALETTE).map(([k, c]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "swatch"; b.style.background = c.base; b.title = c.name;
+    b.setAttribute("aria-label", c.name); b.setAttribute("aria-pressed", draftLook.color === k);
+    b.onclick = () => { draftLook.color = k; renderStyle(); };
+    return b;
+  }));
+  const tiles = (el, opts, key) => el.replaceChildren(...Object.entries(opts).map(([k, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tile"; b.setAttribute("aria-pressed", draftLook[key] === k);
+    // The graduation cap is earned by finishing training.
+    if (k === "grad" && !(profile.unlocks && profile.unlocks.grad)) { b.disabled = true; label = "Finish training"; }
+    const pic = document.createElement("canvas");
+    drawBallOn(sizedCanvas(pic, 56), 28, 36, 14, { ...draftLook, [key]: k });
+    const t = document.createElement("span"); t.textContent = label;
+    b.append(pic, t);
+    b.onclick = () => { draftLook[key] = k; renderStyle(); };
+    return b;
+  }));
+  tiles($("faces"), FACES, "face");
+  tiles($("tops"), TOPS, "top");
+}
+function saveStyle() {
+  profile.look = validLook(draftLook, "blue"); saveJSON("wallrush-profile", profile);
+  const g = online.game;
+  if (mode === "online" && g && online.role) publishGame({ ...g, seq: g.seq + 1, looks: { ...g.looks, [online.me]: profile.look }, ts: Date.now() });
+  screen = "game"; render();
+}
+
+/* ---------- tutorial ---------- */
+let tut = null, lastAction = null, screen = "game", pendingCode = null;
+const coarse = () => matchMedia("(pointer: coarse)").matches;
+// Training: four short hands-on challenges, each teaching one rule by doing it. There's no skip;
+// finishing earns the graduation cap.
+const LESSONS = [
+  { key: "race", title: "Race to the finish",
+    text: () => (pendingCode ? "Your friend is waiting! Finish training to join their game. " : "") +
+      `Get your ball to the green finish line. ${coarse() ? "Tap" : "Click"} a highlighted square to step there. You move one square at a time.`,
+    setup: s => { s.pos.blue = { r: 3, c: 4 }; s.pos.red = { r: 12, c: 7 }; },
+    win: "You made it! First one to the finish line wins." },
+  { key: "block", title: "Block your rival",
+    text: () => coarse()
+      ? "Red is 2 steps from winning! Stop them: tap the line right above the red ball, then press Place wall."
+      : "Red is 2 steps from winning! Stop them: click the line right above the red ball to build a wall.",
+    setup: s => { s.pos.blue = { r: 9, c: 2 }; s.pos.red = { r: 2, c: 4 }; },
+    win: "Blocked! Now red has to walk around. On your turn you either move or build a wall, never both." },
+  { key: "limit", title: "Walls run out",
+    text: () => "You only get 10 walls per game. See the bar under the board? You're down to your last one here. Build it anywhere.",
+    setup: s => { s.pos.blue = { r: 9, c: 2 }; s.pos.red = { r: 7, c: 6 }; s.left.blue = 1; },
+    win: "Out of walls! From now on you can only move. Spend your 10 wisely." },
+  { key: "trap", title: "No trapping allowed",
+    text: () => "Red is almost boxed in. Try to close the last opening, right above the red ball.",
+    setup: s => {
+      s.pos.blue = { r: 10, c: 1 }; s.pos.red = { r: 6, c: 4 };
+      s.walls = [{ o: "v", r: 6, c: 4, p: "red" }, { o: "v", r: 6, c: 5, p: "red" }, { o: "h", r: 8, c: 4, p: "red" }];
+    },
+    win: "Not allowed! Walls can never trap someone completely. There must always be a way to the finish." },
+];
+function startTutorial() {
+  if (online.code) leaveGame(true);
+  clearTimeout(cpuTimer);
+  mode = "tutorial"; screen = "game"; tut = { step: 0 };
+  for (const k of ["cpu", "pvp", "online"]) $("mode-" + k).setAttribute("aria-pressed", "false");
+  setupLesson();
+}
+function setupLesson() {
+  const s = freshState("race");
+  LESSONS[tut.step].setup(s);
+  state = s; history = []; hover = null; press = null; anim.blue = anim.red = anim.drop = null;
+  tut.won = false; tut.hint = ""; tut.start = clone(s);
+  render();
+  window.scrollTo(0, 0);
+}
+function lessonWon() {
+  if (!tut || tut.won) return;
+  tut.won = true; tut.hint = ""; hover = null;
+  burstConfetti();
+  render();
+}
+// Undo an action that didn't complete the challenge, with a hint.
+function lessonRetry(hint) {
+  state = clone(tut.start); hover = null; anim.blue = anim.red = anim.drop = null;
+  tut.hint = hint; render();
+}
+function tutorialEvent() {
+  if (!tut || tut.won || tut.reward) return;
+  const key = LESSONS[tut.step].key;
+  if (key === "race") { if (state.pos.blue.r === 0) lessonWon(); }
+  else if (key === "block") {
+    if (lastAction === "move") return lessonRetry("This time, build a wall instead of moving.");
+    const d = distMap(blockedSet(state.walls), 0);
+    if (d[state.pos.red.r][state.pos.red.c] > 2) lessonWon();
+    else lessonRetry("That wall didn't slow red down. Put it right above the red ball.");
+  } else if (key === "limit") { if (state.left.blue === 0) lessonWon(); }
+  else if (key === "trap") lessonRetry(lastAction === "wall" ? "Try the line right above the red ball, where the opening is." : "Try building a wall right above the red ball.");
+}
+function nextLesson() {
+  if (!tut) return;
+  if (tut.reward) { finishTutorial(false); return; }
+  if (!tut.won) return;
+  if (tut.step < LESSONS.length - 1) { tut.step++; setupLesson(); return; }
+  tut.reward = true;
+  profile.unlocks = { ...(profile.unlocks || {}), grad: true }; saveJSON("wallrush-profile", profile);
+  burstConfetti();
+  render();
+}
+function finishTutorial(keepLook) {
+  if (tut && tut.reward && !keepLook) { profile.look = { ...profile.look, top: "grad" }; saveJSON("wallrush-profile", profile); }
+  saveJSON("wallrush-tutorial", true);
+  tut = null;
+  if (!profile.name) { showNameScreen(); return; }
+  afterSetup();
+}
+function renderCoach() {
+  const L = LESSONS[tut.step], reward = !!tut.reward;
+  $("coach").classList.toggle("won", tut.won || reward);
+  $("coach-step").textContent = reward ? "Training complete" : `Training · ${tut.step + 1} of ${LESSONS.length}`;
+  $("coach-dots").innerHTML = LESSONS.map((_, i) => `<i class="${reward || i < tut.step || (i === tut.step && tut.won) ? "done" : i === tut.step ? "now" : ""}"></i>`).join("");
+  $("coach-title").textContent = reward ? "You're ready to play!" : tut.won ? "Nice!" : L.title;
+  $("coach-text").textContent = reward ? "You earned the graduation cap for your ball. Want to wear it?" : tut.won ? L.win : L.text();
+  $("coach-hint").hidden = !tut.hint || tut.won; $("coach-hint").textContent = tut.hint;
+  $("coach-reward").hidden = !reward;
+  if (reward) drawBallOn(sizedCanvas($("coach-reward"), 120), 60, 74, 32, { ...profile.look, top: "grad" });
+  $("coach-next").hidden = !(tut.won || reward);
+  $("coach-next").textContent = reward ? "Wear it and play" : tut.step < LESSONS.length - 1 ? "Next challenge" : "Finish training";
+  $("coach-keep").hidden = !reward;
+}
+function showNameScreen() {
+  screen = "name";
+  $("name-input").value = profile.name;
+  $("name-msg").textContent = "";
+  render();
+  setTimeout(() => { try { $("name-input").focus(); } catch (e) {} }, 50);
+}
+// After the tutorial and name: go to the invited game if there is one, otherwise the CPU.
+function afterSetup() {
+  screen = "game";
+  if (profile.name) connect();
+  const code = pendingCode; pendingCode = null;
+  if (code) { setMode("online"); joinGame(code); }
+  else if (mode === "tutorial" || mode === "online" && !online.code) setMode(mode === "online" ? "online" : "cpu");
+  else render();
+}
+
+/* ---------- add to home screen ---------- */
+const ua = navigator.userAgent;
+const isAndroid = /Android/.test(ua);
+const isIOS = !isAndroid && (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+const inAppBrowser = /Instagram|FBAN|FBAV|Line\/|Snapchat|TikTok/.test(ua);
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const offerInstall = () => (isIOS || isAndroid) && !isStandalone() && !loadJSON("wallrush-install-seen", false);
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", ev => { ev.preventDefault(); deferredInstall = ev; if (screen === "install") renderInstall(); });
+const SHARE_ICON = '<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Share button"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+const DOTS_ICON = '<svg class="glyph" viewBox="0 0 24 24" fill="currentColor" aria-label="Menu button"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+const STEPS = {
+  iosSafari: [
+    `Tap the Share button ${SHARE_ICON} in Safari. It's in the bar at the bottom of the screen. If you don't see it, tap the ••• button first.`,
+    "Scroll down and tap <strong>Add to Home Screen</strong>.",
+    "Tap <strong>Add</strong>. Wall Rush now has its own icon on your home screen.",
+  ],
+  iosChrome: [
+    `Tap the Share button ${SHARE_ICON} at the top right, next to the address bar.`,
+    "Tap <strong>Add to Home Screen</strong>.",
+    "Tap <strong>Add</strong>. Wall Rush now has its own icon on your home screen.",
+  ],
+  android: [
+    `Tap the menu button ${DOTS_ICON} at the top right of Chrome.`,
+    "Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.",
+    "Tap <strong>Install</strong> (or <strong>Add</strong>). Wall Rush now has its own icon on your home screen.",
+  ],
+};
+const stepList = items => "<ol class=\"steps\">" + items.map(t => `<li><span>${t}</span></li>`).join("") + "</ol>";
+function renderInstall() {
+  let html;
+  if (inAppBrowser) html = stepList(["Open this page in your phone's browser first: tap the ••• menu and choose <strong>Open in browser</strong> (or <strong>Open in Safari</strong>).", "Then come back to this guide from the link at the bottom of the page."]);
+  else if (isIOS) html = stepList(/CriOS/.test(ua) ? STEPS.iosChrome : STEPS.iosSafari);
+  else if (isAndroid) html = stepList(STEPS.android);
+  else html = "<p class=\"lede\">Open this page on your phone, then follow the steps.</p><h3>iPhone (Safari)</h3>" + stepList(STEPS.iosSafari) + "<h3>Android (Chrome)</h3>" + stepList(STEPS.android);
+  $("install-steps").innerHTML = html;
+  $("install-now").hidden = !deferredInstall;
+  const note = $("install-note");
+  note.hidden = !isIOS && isAndroid;
+  note.textContent = "Your name, ball and rivalries move over to the home screen app the first time you open it. After that, play from the app. When a friend sends you a link, open the app and tap Paste invite.";
+}
+function showInstall() {
+  nudgeOn = false; saveJSON("wallrush-nudged", true);
+  prepareTransfer();
+  screen = "install";
+  renderInstall();
+  render();
+  window.scrollTo(0, 0);
+}
+function closeInstall() {
+  saveJSON("wallrush-install-seen", true);
+  afterSetup();
+}
+
+/* ---------- home screen nudge, and moving a profile into the app ---------- */
+let nudgeOn = false, finishSeen = false, importing = null;
+// After the first finished game in a phone browser (never inside the home screen app), point at the link once.
+function maybeNudge() {
+  if (!(isIOS || isAndroid) || isStandalone() || loadJSON("wallrush-nudged", false)) return;
+  saveJSON("wallrush-nudged", true);
+  nudgeOn = true; render();
+  const link = $("add-home"), inView = () => { const r = link.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; };
+  setTimeout(() => { try { link.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" }); } catch (e) {} }, 400);
+  // If a smooth scroll didn't happen, jump there.
+  setTimeout(() => { if (!inView()) try { link.scrollIntoView({ block: "center" }); } catch (e) {} }, 1400);
+}
+// iPhone gives the home screen app its own empty storage. So when the guide opens in Safari, save the
+// profile on the message server under a private key and put the key in the page address. iPhone starts
+// the app at that address, and the app imports the profile on its first launch.
+const transferTopic = key => `${T}/x/${key}`;
+function prepareTransfer() {
+  if (!isIOS || isStandalone()) return;
+  let key = loadJSON("wallrush-xkey", "");
+  if (!/^[a-z0-9]{12}$/.test(key)) {
+    key = (Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8)).padEnd(12, "0");
+    saveJSON("wallrush-xkey", key);
+  }
+  try { window.history.replaceState(null, "", location.pathname + "?x=" + key); } catch (e) {}
+  if (!connect()) return;
+  const data = { v: 1, profile: { id: profile.id, name: profile.name, look: profile.look, unlocks: profile.unlocks || {} }, records, ts: Date.now() };
+  online.client.publish(transferTopic(key), JSON.stringify(data), { qos: 1, retain: true });
+}
+function startImport(key) {
+  importing = key;
+  showNameScreen();
+  $("name-msg").textContent = "Bringing over your name and rivalries…";
+  if (!connect()) return;
+  online.client.subscribe(transferTopic(key), { qos: 1 });
+  setTimeout(() => {
+    if (!importing) return;
+    importing = null;
+    if ($("name-msg").textContent.startsWith("Bringing")) $("name-msg").textContent = "";
+  }, 8000);
+}
+function onTransfer(key, msg) {
+  if (key !== importing || profile.name || !msg || !msg.profile) return;
+  const p = msg.profile;
+  if (!/^[a-z0-9]{8,16}$/.test(p.id || "") || !cleanName(p.name)) return;
+  importing = null;
+  profile.id = p.id; profile.name = cleanName(p.name); profile.look = validLook(p.look, "blue");
+  if (p.unlocks && p.unlocks.grad === true) profile.unlocks = { grad: true };
+  saveJSON("wallrush-profile", profile);
+  for (const [k, r] of Object.entries(msg.records && typeof msg.records === "object" ? msg.records : {}))
+    if (/^[a-z0-9]{8,16}-[a-z0-9]{8,16}$/.test(k) && r && typeof r.results === "object") mergeRecord(k, r);
+  for (const k of ["wallrush-tutorial", "wallrush-install-seen", "wallrush-nudged"]) saveJSON(k, true);
+  location.replace(location.pathname); // restart as the imported player
+}
+
+/* ---------- canvas ---------- */
+const cv = document.getElementById("board"), ctx = cv.getContext("2d");
+let S = 40, PAD = 6, W = 0, H = 0, colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["board", "grid", "ink", "muted", "finish", "finish-tint", "blue", "blue-hi", "red", "red-hi", "shadow"])
+    colors[k] = cs.getPropertyValue(`--${k}`).trim();
+}
+function resize() {
+  const app = document.querySelector(".app");
+  const availW = app.clientWidth - 20;
+  const availH = Math.max(320, window.innerHeight - (document.body.classList.contains("match") ? 150 : 260));
+  S = Math.floor(Math.min(availW / COLS, availH / ROWS, 46));
+  PAD = Math.round(S * 0.18);
+  W = S * COLS + PAD * 2; H = S * ROWS + PAD * 2;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function wallRect(w) {
+  const t = S * 0.17, inset = S * 0.06;
+  if (w.o === "h") return { x: PAD + w.c * S + inset, y: PAD + w.r * S - t / 2, w: 2 * S - 2 * inset, h: t };
+  return { x: PAD + w.c * S - t / 2, y: PAD + w.r * S + inset, w: t, h: 2 * S - 2 * inset };
+}
+function drawWall(w, color, hi, alpha = 1, scale = 1) {
+  const b = wallRect(flipWall(w));
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy);
+  if (alpha === 1) { ctx.shadowColor = colors.shadow; ctx.shadowBlur = S * 0.18; ctx.shadowOffsetY = S * 0.06; }
+  rr(b.x, b.y, b.w, b.h, Math.min(b.w, b.h) / 2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.shadowColor = "transparent";
+  // glossy highlight stripe
+  const t = Math.min(b.w, b.h);
+  ctx.globalAlpha = alpha * 0.55;
+  if (w.o === "h") rr(b.x + t * 0.5, b.y + t * 0.18, b.w - t, t * 0.26, t * 0.13);
+  else rr(b.x + t * 0.18, b.y + t * 0.5, t * 0.26, b.h - t, t * 0.13);
+  ctx.fillStyle = hi; ctx.fill();
+  ctx.restore();
+}
+// A ball with its color, face and hat, drawn on any canvas context g at (x, y) with radius R.
+function drawBallOn(g, x, y, R, look) {
+  const col = PALETTE[look.color] || PALETTE.blue;
+  g.save();
+  if (look.top === "ears") drawTop(g, x, y, R, look, col); // ears sit behind the ball
+  g.shadowColor = colors.shadow || "rgba(0,0,0,0.2)"; g.shadowBlur = R * 0.8; g.shadowOffsetY = R * 0.25;
+  const grad = g.createRadialGradient(x - R * 0.35, y - R * 0.4, R * 0.1, x, y, R);
+  grad.addColorStop(0, col.hi); grad.addColorStop(0.45, col.base); grad.addColorStop(1, col.base);
+  g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fillStyle = grad; g.fill();
+  g.shadowColor = "transparent";
+  g.lineWidth = Math.max(1, R * 0.05); g.strokeStyle = "rgba(128,128,128,0.35)"; g.stroke();
+  g.beginPath(); g.arc(x - R * 0.42, y - R * 0.5, R * 0.14, 0, Math.PI * 2);
+  g.fillStyle = "rgba(255,255,255,0.7)"; g.fill();
+  drawFace(g, x, y, R, look.face, col);
+  if (look.top !== "ears") drawTop(g, x, y, R, look, col);
+  g.restore();
+}
+function drawFace(g, x, y, R, face, col) {
+  if (face === "none") return;
+  const ink = col.dark ? "#f4f6fb" : "#1d2433";
+  const dot = (dx, dy, r) => { g.beginPath(); g.arc(x + dx * R, y + dy * R, r * R, 0, Math.PI * 2); g.fill(); };
+  const arc = (dx, dy, r, a0, a1) => { g.beginPath(); g.arc(x + dx * R, y + dy * R, r * R, a0, a1); g.stroke(); };
+  const smile = () => arc(0, 0.02, 0.42, 0.2 * Math.PI, 0.8 * Math.PI);
+  g.fillStyle = ink; g.strokeStyle = ink; g.lineWidth = R * 0.1; g.lineCap = "round";
+  if (face === "smile") { dot(-0.32, -0.1, 0.1); dot(0.32, -0.1, 0.1); smile(); }
+  else if (face === "grin") {
+    arc(-0.32, -0.02, 0.13, 1.1 * Math.PI, 1.9 * Math.PI); arc(0.32, -0.02, 0.13, 1.1 * Math.PI, 1.9 * Math.PI);
+    g.beginPath(); g.arc(x, y + 0.16 * R, 0.38 * R, 0, Math.PI); g.closePath(); g.fill();
+  } else if (face === "wink") { dot(-0.32, -0.1, 0.1); arc(0.32, -0.04, 0.12, 1.1 * Math.PI, 1.9 * Math.PI); smile(); }
+  else if (face === "cool") {
+    g.fillStyle = "#111318"; g.strokeStyle = "#111318"; g.lineWidth = R * 0.08;
+    for (const sx of [-1, 1]) { g.beginPath(); g.roundRect(x + sx * 0.34 * R - 0.25 * R, y - 0.3 * R, 0.5 * R, 0.3 * R, 0.12 * R); g.fill(); }
+    g.beginPath(); g.moveTo(x - 0.12 * R, y - 0.2 * R); g.lineTo(x + 0.12 * R, y - 0.2 * R); g.stroke();
+    g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(x - 0.5 * R, y - 0.25 * R, 0.12 * R, 0.06 * R); g.fillRect(x + 0.18 * R, y - 0.25 * R, 0.12 * R, 0.06 * R);
+    g.strokeStyle = ink; g.lineWidth = R * 0.1; arc(0, 0.12, 0.3, 0.25 * Math.PI, 0.75 * Math.PI);
+  } else if (face === "shock") {
+    dot(-0.32, -0.14, 0.11); dot(0.32, -0.14, 0.11);
+    g.lineWidth = R * 0.09; g.beginPath(); g.ellipse(x, y + 0.3 * R, 0.13 * R, 0.17 * R, 0, 0, Math.PI * 2); g.stroke();
+  } else if (face === "stache") {
+    dot(-0.32, -0.2, 0.1); dot(0.32, -0.2, 0.1);
+    g.fillStyle = col.dark ? "#f4f6fb" : "#3b2414";
+    for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(x + sx * 0.2 * R, y + 0.14 * R, 0.24 * R, 0.11 * R, sx * 0.35, 0, Math.PI * 2); g.fill(); }
+  }
+}
+function drawTop(g, x, y, R, look, col) {
+  const top = look.top;
+  if (top === "none") return;
+  const P = (dx, dy) => [x + dx * R, y + dy * R];
+  const poly = (pts, fill) => { g.beginPath(); g.moveTo(...P(...pts[0])); for (const q of pts.slice(1)) g.lineTo(...P(...q)); g.closePath(); g.fillStyle = fill; g.fill(); };
+  const dot = (dx, dy, r, fill) => { g.beginPath(); g.arc(x + dx * R, y + dy * R, r * R, 0, Math.PI * 2); g.fillStyle = fill; g.fill(); };
+  if (top === "party") {
+    poly([[-0.42, -0.78], [0.42, -0.78], [0.05, -1.7]], "#ff5fa8");
+    g.save(); g.clip(); g.fillStyle = "#ffd23f";
+    g.fillRect(x - 0.6 * R, y - 1.1 * R, 1.2 * R, 0.14 * R); g.fillRect(x - 0.6 * R, y - 1.38 * R, 1.2 * R, 0.11 * R);
+    g.restore();
+    dot(0.05, -1.72, 0.14, "#ffd23f");
+  } else if (top === "crown") {
+    poly([[-0.5, -0.72], [-0.56, -1.38], [-0.26, -1.08], [0, -1.5], [0.26, -1.08], [0.56, -1.38], [0.5, -0.72]], "#f5c518");
+    g.strokeStyle = "#c9971a"; g.lineWidth = R * 0.05; g.stroke();
+    dot(0, -0.92, 0.09, "#e23b5b"); dot(-0.3, -0.9, 0.07, "#2f8fe0"); dot(0.3, -0.9, 0.07, "#2f8fe0");
+  } else if (top === "tophat") {
+    g.fillStyle = "#1b1d24";
+    g.beginPath(); g.ellipse(x, y - 0.8 * R, 0.72 * R, 0.14 * R, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.roundRect(x - 0.42 * R, y - 1.62 * R, 0.84 * R, 0.86 * R, 0.06 * R); g.fill();
+    g.fillStyle = "#dc2f45"; g.fillRect(x - 0.42 * R, y - 1.0 * R, 0.84 * R, 0.15 * R);
+  } else if (top === "bow") {
+    const bx = 0.42, by = -0.8;
+    poly([[bx, by], [bx - 0.42, by - 0.26], [bx - 0.42, by + 0.26]], "#ff6fb5");
+    poly([[bx, by], [bx + 0.42, by - 0.26], [bx + 0.42, by + 0.26]], "#ff6fb5");
+    dot(bx, by, 0.12, "#e0448f");
+  } else if (top === "ears") {
+    for (const sx of [-1, 1]) {
+      poly([[sx * 0.82, -0.5], [sx * 0.66, -1.28], [sx * 0.16, -0.9]], col.base);
+      poly([[sx * 0.68, -0.66], [sx * 0.6, -1.08], [sx * 0.34, -0.86]], "#ffb3cf");
+    }
+  } else if (top === "cap") {
+    const capCol = look.color === "red" ? "#2f5fe0" : "#dc2f45";
+    g.fillStyle = capCol;
+    g.beginPath(); g.arc(x, y - 0.55 * R, 0.66 * R, Math.PI, 0); g.closePath(); g.fill();
+    g.beginPath(); g.ellipse(x + 0.6 * R, y - 0.56 * R, 0.52 * R, 0.12 * R, 0, 0, Math.PI * 2); g.fill();
+    dot(0, -1.2, 0.08, "#ffffff");
+  } else if (top === "grad") {
+    g.fillStyle = "#1b1d24";
+    g.beginPath(); g.moveTo(...P(-0.46, -1.0)); g.lineTo(...P(0.46, -1.0)); g.lineTo(...P(0.42, -0.68));
+    g.quadraticCurveTo(x, y - 0.56 * R, x - 0.42 * R, y - 0.68 * R); g.closePath(); g.fill();
+    poly([[0, -1.44], [0.84, -1.13], [0, -0.84], [-0.84, -1.13]], "#1b1d24");
+    g.strokeStyle = "#f5c518"; g.lineWidth = R * 0.07; g.lineCap = "round";
+    g.beginPath(); g.moveTo(...P(0, -1.14)); g.lineTo(...P(0.62, -1.02)); g.lineTo(...P(0.64, -0.66)); g.stroke();
+    dot(0.64, -0.6, 0.1, "#f5c518");
+  } else if (top === "halo") {
+    g.strokeStyle = "#f5c518"; g.lineWidth = 0.14 * R;
+    g.beginPath(); g.ellipse(x, y - 1.32 * R, 0.55 * R, 0.17 * R, 0, 0, Math.PI * 2); g.stroke();
+  }
+}
+const ease = t => 1 - Math.pow(1 - t, 3);
+// In an online Face-off game the red player sees the board turned around, so both players start at the
+// bottom of their own screen. These convert between the shared board and what this screen shows.
+const flipped = () => mode === "online" && state.variant === "faceoff" && online.role === "red";
+const vR = r => (flipped() ? ROWS - 1 - r : r), vC = c => (flipped() ? COLS - 1 - c : c);
+// A wall turned around (the same conversion works in both directions).
+function flipWall(w) {
+  if (!flipped()) return w;
+  return w.o === "h" ? { ...w, r: ROWS - w.r, c: COLS - 2 - w.c } : { ...w, r: ROWS - 2 - w.r, c: COLS - w.c };
+}
+function ballXY(p, now) {
+  const to = state.pos[p];
+  let r = to.r, c = to.c;
+  const a = anim[p];
+  if (a && !reduceMotion) {
+    const t = Math.min(1, (now - a.t0) / 220);
+    r = a.from.r + (to.r - a.from.r) * ease(t); c = a.from.c + (to.c - a.from.c) * ease(t);
+    if (t >= 1) anim[p] = null;
+  }
+  let x = PAD + (vC(c) + 0.5) * S, y = PAD + (vR(r) + 0.5) * S;
+  if (state.pos.blue.r === state.pos.red.r && state.pos.blue.c === state.pos.red.c)
+    x += (p === "blue" ? -1 : 1) * S * 0.16;
+  return { x, y };
+}
+function draw(now) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = colors.board; ctx.fillRect(0, 0, W, H);
+  // finish rows: green at the top in Race; in Face-off, each player's finish in their own color
+  const band = (row, tint, line) => {
+    const top = row === 0, y0 = PAD + row * S;
+    const g = ctx.createLinearGradient(0, top ? y0 : y0 + S, 0, top ? y0 + S : y0);
+    g.addColorStop(0, tint); g.addColorStop(1, "transparent");
+    ctx.fillStyle = g; ctx.fillRect(PAD, y0, S * COLS, S);
+    ctx.fillStyle = line; ctx.fillRect(PAD, top ? y0 : y0 + S - 2, S * COLS, 2);
+  };
+  if (state.variant === "faceoff") {
+    const cb = seatColor("blue").base, cr = seatColor("red").base;
+    band(vR(0), hexA(cb, 0.22), cb); band(vR(ROWS - 1), hexA(cr, 0.22), cr);
+  } else band(0, colors["finish-tint"], colors.finish);
+  // grid
+  ctx.strokeStyle = colors.grid; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let c = 0; c <= COLS; c++) { const x = Math.round(PAD + c * S) + 0.5; ctx.moveTo(x, PAD); ctx.lineTo(x, PAD + ROWS * S); }
+  for (let r = 0; r <= ROWS; r++) { const y = Math.round(PAD + r * S) + 0.5; ctx.moveTo(PAD, y); ctx.lineTo(PAD + COLS * S, y); }
+  ctx.stroke();
+
+  // squares you can move to: tinted tiles, plus a see-through ball where a finger is pressing
+  if (humanTurn()) {
+    const p = state.turn, col = seatColor(p).base, pulse = reduceMotion ? 1 : 0.75 + 0.25 * Math.sin(now / 260);
+    for (const m of legalMoves(state, p)) {
+      const x = PAD + (vC(m.c) + 0.5) * S, y = PAD + (vR(m.r) + 0.5) * S;
+      const isHover = hover && hover.type === "cell" && hover.r === m.r && hover.c === m.c;
+      const isPress = press && !press.off && press.r === m.r && press.c === m.c;
+      ctx.fillStyle = col; ctx.globalAlpha = isPress ? 0.3 : isHover ? 0.24 : 0.14;
+      rr(PAD + vC(m.c) * S + S * 0.07, PAD + vR(m.r) * S + S * 0.07, S * 0.86, S * 0.86, S * 0.18); ctx.fill();
+      ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(x, y, S * 0.09 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      if (isPress) { ctx.save(); ctx.globalAlpha = 0.5; drawBallOn(ctx, x, y, S * 0.3, seatLook(p)); ctx.restore(); }
+    }
+  }
+  // walls
+  for (const w of state.walls) {
+    let scale = 1;
+    if (anim.drop && anim.drop.key === wallKey(w) && !reduceMotion) {
+      const t = Math.min(1, (now - anim.drop.t0) / 260);
+      scale = 1.25 - 0.25 * ease(t);
+      if (t >= 1) anim.drop = null;
+    }
+    const wc = seatColor(w.p);
+    drawWall(w, wc.base, wc.hi, 1, scale);
+  }
+  // wall preview
+  if (hover && hover.type === "wall" && humanTurn()) {
+    const bad = wallProblem(state, hover.w);
+    const tc = seatColor(state.turn);
+    drawWall(hover.w, bad ? colors.muted : tc.base, tc.hi, bad ? 0.35 : 0.5);
+  }
+  // balls
+  for (const p of ["red", "blue"]) { const { x, y } = ballXY(p, now); drawBallOn(ctx, x, y, S * 0.3, seatLook(p)); }
+  drawConfetti(now);
+  requestAnimationFrame(draw);
+}
+
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+// A short burst of confetti over the board when a training challenge is completed.
+let confetti = [];
+function burstConfetti() {
+  if (reduceMotion) return;
+  const cols = Object.values(PALETTE).map(c => c.base);
+  confetti = Array.from({ length: 70 }, () => ({
+    x: W / 2 + (Math.random() - 0.5) * W * 0.3, y: H * 0.35, vx: (Math.random() - 0.5) * 9, vy: -4 - Math.random() * 7,
+    s: 4 + Math.random() * 5, rot: Math.random() * 6, col: cols[Math.floor(Math.random() * cols.length)], t0: performance.now(),
+  }));
+}
+function drawConfetti(now) {
+  if (!confetti.length) return;
+  confetti = confetti.filter(c => now - c.t0 < 1600);
+  for (const c of confetti) {
+    c.vy += 0.35; c.x += c.vx; c.y += c.vy; c.rot += 0.2;
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot); ctx.fillStyle = c.col;
+    ctx.globalAlpha = Math.max(0, 1 - (now - c.t0) / 1600); ctx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2); ctx.restore();
+  }
+}
+
+/* ---------- input ---------- */
+// A finger pressing on a square you can move to. The move happens when the finger lifts on the same square.
+let press = null;
+function hit(ev) {
+  const h = hitOnScreen(ev);
+  if (!h) return null;
+  return h.type === "wall" ? { type: "wall", w: flipWall(h.w) } : { type: "cell", r: vR(h.r), c: vC(h.c) };
+}
+function hitOnScreen(ev) {
+  const rect = cv.getBoundingClientRect();
+  const fx = (ev.clientX - rect.left - PAD) / S, fy = (ev.clientY - rect.top - PAD) / S;
+  if (fx < 0 || fy < 0 || fx > COLS || fy > ROWS) return null;
+  const dx = Math.abs(fx - Math.round(fx)), dy = Math.abs(fy - Math.round(fy)), th = ev.pointerType === "mouse" ? 0.2 : 0.32;
+  if (dy < th && dy <= dx) {
+    const cv_ = Math.min(COLS - 1, Math.max(1, Math.round(fx)));
+    const w = { o: "h", r: Math.round(fy), c: cv_ - 1 };
+    if (wallInBounds(w)) return { type: "wall", w };
+  } else if (dx < th) {
+    const rv = Math.min(ROWS - 1, Math.max(1, Math.round(fy)));
+    const w = { o: "v", r: rv - 1, c: Math.round(fx) };
+    if (wallInBounds(w)) return { type: "wall", w };
+  }
+  return { type: "cell", r: Math.min(ROWS - 1, Math.floor(fy)), c: Math.min(COLS - 1, Math.floor(fx)) };
+}
+cv.addEventListener("pointermove", ev => { if (ev.pointerType === "mouse") { hover = hit(ev); } });
+// Touch screens fire pointerleave when the finger lifts, so only a mouse clears the preview here.
+cv.addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") hover = null; });
+cv.addEventListener("pointerdown", ev => {
+  if (matchOn()) tryFullscreen();
+  if (!humanTurn()) return;
+  const h = hit(ev);
+  if (!h) return;
+  if (ev.pointerType !== "mouse") {
+    // On touch, a tap on a square you can move to is a move unless it lands right on a line.
+    // A line tap only previews a wall; the Place wall button builds it. Any other tap cancels.
+    const c = cellAt(ev);
+    const canMove = c && legalMoves(state, state.turn).some(m => m.r === c.r && m.c === c.c);
+    if (canMove && (h.type === "cell" || c.edge > 0.12)) { hover = null; press = { r: c.r, c: c.c, off: false }; setStatus(); return; }
+    if (h.type === "wall") { hover = { ...h, touch: true }; setStatus(wallProblem(state, h.w)); return; }
+    hover = null; setStatus(); return;
+  }
+  if (h.type === "cell") {
+    const ok = legalMoves(state, state.turn).some(m => m.r === h.r && m.c === h.c);
+    if (ok) doMove({ r: h.r, c: h.c }); else { hover = null; setStatus(); }
+    return;
+  }
+  placeWall(h.w);
+});
+cv.addEventListener("pointermove", ev => {
+  if (!press || ev.pointerType === "mouse") return;
+  const c = cellAt(ev);
+  press.off = !c || c.r !== press.r || c.c !== press.c; // sliding off the square cancels the move
+});
+cv.addEventListener("pointerup", ev => {
+  if (!press || ev.pointerType === "mouse") return;
+  const p = press; press = null;
+  if (!p.off && humanTurn() && legalMoves(state, state.turn).some(m => m.r === p.r && m.c === p.c)) doMove({ r: p.r, c: p.c });
+});
+cv.addEventListener("pointercancel", () => { press = null; });
+// The square under the pointer, and how close the pointer is to that square's edge (in squares).
+function cellAt(ev) {
+  const rect = cv.getBoundingClientRect();
+  const fx = (ev.clientX - rect.left - PAD) / S, fy = (ev.clientY - rect.top - PAD) / S;
+  if (fx < 0 || fy < 0 || fx >= COLS || fy >= ROWS) return null;
+  const r = Math.floor(fy), c = Math.floor(fx);
+  return { r: vR(r), c: vC(c), edge: Math.min(fx - c, c + 1 - fx, fy - r, r + 1 - fy) };
+}
+function placeWall(w) {
+  const problem = wallProblem(state, w);
+  if (problem) { setStatus(problem); return; }
+  doWall({ ...w, p: state.turn });
+}
+window.addEventListener("keydown", ev => {
+  let k = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[ev.key];
+  if (!k || !humanTurn()) return;
+  if (flipped()) k = [-k[0], -k[1]]; // arrows follow what's on screen
+  ev.preventDefault();
+  const { r, c } = state.pos[state.turn];
+  if (canStep(blockedSet(state.walls), r, c, k[0], k[1])) doMove({ r: r + k[0], c: c + k[1] });
+});
+
+/* ---------- chrome ---------- */
+const $ = id => document.getElementById(id);
+function names() {
+  if (mode === "cpu") return { blue: "You", red: "CPU" };
+  if (mode === "tutorial") return { blue: "You", red: "Rival" };
+  if (mode === "online") {
+    const me = online.role, g = online.game;
+    const seat = p => me === p ? "You" : g && g.players[p] ? "Friend" : "Waiting…";
+    return { blue: g && g.players.blue ? nameFor(g.players.blue) : seat("blue"), red: g && g.players.red ? nameFor(g.players.red) : seat("red") };
+  }
+  return { blue: "Blue", red: "Red" };
+}
+const faceoffStart = () => state.variant === "faceoff" && !state.walls.length && state.pos.blue.r === ROWS - 1 && state.pos.red.r === 0;
+function setStatus(msg) {
+  const n = names(), el = $("status");
+  $("wall-confirm").hidden = !(hover && hover.touch && hover.type === "wall" && humanTurn());
+  if (state.winner && mode === "online") {
+    el.textContent = state.winner === online.role ? "You crossed the finish line first." : `${nameFor(online.game.players[state.winner])} crossed the finish line first.`;
+    return;
+  }
+  if (state.winner) {
+    el.textContent = "";
+    const b = document.createElement("strong"); b.textContent = n[state.winner];
+    el.append(b, " crossed the finish line.");
+    return;
+  }
+  if (msg && mode === "tutorial" && tut && LESSONS[tut.step].key === "trap" && msg.startsWith("Walls can't seal")) { el.textContent = ""; lessonWon(); return; }
+  if (msg) { el.textContent = msg; return; }
+  if (mode === "tutorial") { el.textContent = ""; return; }
+  if (mode === "online") {
+    const my = online.role, g = online.game;
+    const friend = g && my ? g.players[other(my)] : null;
+    if (!online.up) el.textContent = "Connecting…";
+    else if (!g || !my) el.textContent = "Joining the game…";
+    else if (!friend && online.invited) el.textContent = `Invite sent to ${online.invited}. It pops up when they open Wall Rush. You can also send them the link.`;
+    else if (!friend) el.textContent = "Waiting for your friend. Send them the invite link, or tell them the code above.";
+    else if (online.presence[friend] === false && state.turn !== my) el.textContent = "Your friend's screen is off or they switched apps. The game continues when they come back.";
+    else if (state.turn !== my) el.textContent = `Waiting for ${nameFor(friend)} to move…`;
+    else {
+      el.textContent = "";
+      const b = document.createElement("strong"); b.textContent = "Your move.";
+      el.append(b, hover && hover.type === "wall" ? " Press Place wall to build it, or tap anywhere else to cancel." :
+        faceoffStart() ? " Face-off: race to the far side. Your finish line is in your color." : " Step one square, or drop a wall on a grid line to block.");
+    }
+    return;
+  }
+  if (mode === "cpu" && state.turn === "red") { el.textContent = "CPU is thinking…"; return; }
+  const who = mode === "cpu" ? "Your move" : `${n[state.turn]}'s move`;
+  const touchHint = hover && hover.type === "wall" ? "Press Place wall to build it, or tap anywhere else to cancel." :
+    faceoffStart() ? "Face-off: race to the far side. Your finish line is in your color." : "Step one square, or drop a wall on a grid line to block.";
+  el.innerHTML = `<strong>${who}.</strong> ${touchHint}`;
+}
+// Match view: when both players are seated, hide the home screen and count down 3-2-1 before each round.
+let countdown = null, matchShown = false;
+const countdownDone = new Set();
+const matchOn = () => {
+  const g = online.game;
+  return mode === "online" && screen === "game" && !!online.code && !!online.role && !!g && !!g.players.blue && !!g.players.red;
+};
+const atStart = s => !s.winner && !s.walls.length && JSON.stringify(s.pos) === JSON.stringify(freshState(s.variant || "race").pos);
+function maybeCountdown() {
+  const g = online.game;
+  if (!matchOn() || !atStart(state)) return;
+  const key = `${g.code}-${g.round || 1}`;
+  if (countdownDone.has(key) || (countdown && countdown.key === key)) return;
+  countdown = { key, n: 3 };
+  tryFullscreen();
+  const tick = () => {
+    if (!countdown) return;
+    const el = $("countdown-num");
+    el.textContent = countdown.n > 0 ? countdown.n : "Go!";
+    el.classList.toggle("go", countdown.n === 0);
+    el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+    countdown.timer = setTimeout(() => {
+      if (!countdown) return;
+      if (countdown.n > 0) { countdown.n--; tick(); }
+      else { countdownDone.add(countdown.key); countdown = null; render(); }
+    }, countdown.n > 0 ? 800 : 600);
+  };
+  render(); tick();
+}
+function tryFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement || !el.requestFullscreen || isStandalone()) return;
+  try { el.requestFullscreen().catch(() => {}); } catch (e) {}
+}
+function exitFullscreen() {
+  if (document.fullscreenElement && document.exitFullscreen) try { document.exitFullscreen().catch(() => {}); } catch (e) {}
+}
+function render() {
+  const naming = screen !== "game", tutor = mode === "tutorial" && !naming;
+  const on = mode === "online" && !naming, inGame = on && !!online.code;
+  const inMatch = matchOn();
+  if (inMatch !== matchShown) {
+    matchShown = inMatch;
+    document.body.classList.toggle("match", inMatch);
+    if (!inMatch) { exitFullscreen(); if (countdown) { clearTimeout(countdown.timer); countdown = null; } }
+    resize(); window.scrollTo(0, 0);
+  }
+  if (inMatch) {
+    const v = state.variant === "faceoff";
+    $("match-mode").textContent = v ? "Face-off" : "Race";
+    $("match-score").textContent = rivalryText().replace(/^(Race|Face-off): /, "");
+  }
+  $("countdown").hidden = !countdown;
+  if (state.winner && mode !== "tutorial") { if (!finishSeen) { finishSeen = true; setTimeout(maybeNudge, 1500); } }
+  else finishSeen = false;
+  $("nudge").hidden = !nudgeOn || naming;
+  $("add-home").classList.toggle("glow", nudgeOn && !naming);
+  $("name-screen").hidden = screen !== "name";
+  $("style-screen").hidden = screen !== "style";
+  $("my-ball-dot").style.background = PALETTE[profile.look.color].base;
+  $("invite").hidden = !invite || naming || mode === "tutorial";
+  if (invite) $("invite-text").textContent = `${invite.name} invited you to a game.`;
+  $("install").hidden = screen !== "install";
+  $("coach").hidden = !tutor;
+  if (tutor) renderCoach();
+  document.querySelector(".controls").hidden = naming || tutor;
+  $("lobby").hidden = !on || inGame;
+  $("gamebar").hidden = !inGame;
+  const rv = inGame ? rivalryText() : "";
+  $("rivalry").hidden = !rv; $("rivalry").textContent = rv;
+  for (const id of ["finish-label", "bezel", "status"]) $(id).hidden = naming || (on && !inGame);
+  const face = state.variant === "faceoff";
+  $("finish-label-bottom").hidden = naming || (on && !inGame) || !face;
+  $("variant-row").hidden = naming || tutor || inGame;
+  $("v-race").setAttribute("aria-pressed", variant === "race"); $("v-faceoff").setAttribute("aria-pressed", variant === "faceoff");
+  $("create").textContent = variant === "faceoff" ? "Create Face-off game" : "Create game";
+  document.querySelector(".players").hidden = naming || (on && !inGame);
+  $("new").hidden = on;
+  if (inGame) $("game-code").textContent = online.code;
+  if (!inGame) $("link-fallback").hidden = true;
+  if (on && !inGame) renderLobby();
+  const n = names();
+  const finishFor = p => (n[p] === "You" ? "Your finish" : `${n[p]}'s finish`);
+  // In Face-off the line at the top of this screen belongs to whoever starts at the bottom of it.
+  const topSeat = flipped() ? "red" : "blue";
+  $("finish-top-text").textContent = face ? finishFor(topSeat) : "Finish";
+  $("finish-label").style.color = face ? seatColor(topSeat).base : "";
+  $("finish-bottom-text").textContent = finishFor(other(topSeat));
+  $("finish-label-bottom").style.color = seatColor(other(topSeat)).base;
+  for (const p of ["blue", "red"]) {
+    $("name-" + p).textContent = n[p];
+    $("p-" + p).classList.toggle("active", !state.winner && state.turn === p);
+    const sc = seatColor(p).base;
+    $("p-" + p).querySelector(".dot").style.background = sc;
+    $("pips-" + p).innerHTML = Array.from({ length: WALLS }, (_, i) => i < state.left[p] ? `<i style="background:${sc}"></i>` : "<i></i>").join("");
+    $("pips-" + p).title = `${state.left[p]} walls left`;
+  }
+  $("overlay").hidden = !state.winner;
+  if (state.winner) {
+    const meWon = mode === "cpu" ? state.winner === "blue" : mode === "online" && state.winner === myColor();
+    $("win-who").textContent = meWon ? "You win" : `${n[state.winner]} wins`;
+    if (mode === "online") {
+      const r = rematchState(), g = online.game;
+      const friendId = g && online.role ? g.players[other(online.role)] : null;
+      if (friendId) online.lastFriend = nameFor(friendId);
+      const otherId = friendId || (r && typeof r.declinedBy === "string" ? r.declinedBy : null);
+      const fname = otherId ? nameFor(otherId) : online.lastFriend || "Your friend";
+      let msg = "", label = "Rematch", showAgain = !!online.role, showOther = !!online.role;
+      const cur = state.variant || "race", asked = askedMode(r), switching = asked !== cur;
+      if (r && r.declined && r.by === online.me) { msg = `${fname} doesn't want a rematch right now.`; showAgain = showOther = false; }
+      else if (!friendId) { msg = `${fname} left the game.`; showAgain = showOther = false; }
+      else if (r && !r.declined && r.by === online.me) { msg = `${switching ? modeLabel(asked) + " rematch" : "Rematch"} request sent. Waiting for ${fname}…`; showAgain = showOther = false; }
+      else if (r && !r.declined) { msg = switching ? `${fname} wants a ${modeLabel(asked)} rematch!` : `${fname} wants a rematch!`; label = "Play again"; showOther = false; }
+      $("rematch-msg").hidden = !msg; $("rematch-msg").textContent = msg;
+      $("again").textContent = label; $("again").hidden = !showAgain;
+      $("again-other").textContent = `Rematch in ${modeLabel(otherMode(cur))}`; $("again-other").hidden = !showOther;
+      $("leave-game").hidden = false;
+    } else {
+      $("rematch-msg").hidden = true;
+      $("again").textContent = "Play again"; $("again").hidden = false;
+      $("again-other").textContent = `Play ${modeLabel(otherMode(state.variant || "race"))}`; $("again-other").hidden = false;
+      $("leave-game").hidden = true;
+    }
+    $("win-sub").textContent = mode === "online" && rv ? rv : `Reached the finish with ${state.left[state.winner]} wall${state.left[state.winner] === 1 ? "" : "s"} to spare.`;
+  }
+  setStatus();
+  if (inMatch && !countdown) maybeCountdown();
+}
+function newGame() {
+  clearTimeout(cpuTimer);
+  state = freshState(); history = []; hover = null; anim.blue = anim.red = anim.drop = null;
+  render();
+}
+function setVariant(v) {
+  variant = v === "faceoff" ? "faceoff" : "race"; saveJSON("wallrush-variant", variant);
+  if (mode === "online") { if (!online.code) { state = freshState(); render(); } }
+  else newGame();
+}
+function setMode(m) {
+  tut = null; screen = "game";
+  if (mode === "online" && m !== "online" && online.code) leaveGame();
+  if (m === "online" && mode === "online") { render(); return; }
+  mode = m;
+  for (const k of ["cpu", "pvp", "online"]) $("mode-" + k).setAttribute("aria-pressed", m === k);
+  if (m === "online") {
+    clearTimeout(cpuTimer); history = []; hover = null; anim.blue = anim.red = anim.drop = null;
+    state = freshState();
+    lobbyMsg("");
+    render();
+  } else newGame();
+}
+$("mode-cpu").onclick = () => setMode("cpu");
+$("mode-pvp").onclick = () => setMode("pvp");
+$("mode-online").onclick = () => setMode("online");
+$("v-race").onclick = () => setVariant("race");
+$("v-faceoff").onclick = () => setVariant("faceoff");
+$("create").onclick = () => hostGame();
+$("join-form").addEventListener("submit", ev => { ev.preventDefault(); joinGame($("join-code").value); });
+$("copy-link").onclick = copyLink;
+$("leave").onclick = leaveGame;
+$("match-leave").onclick = () => (state.winner ? leaveAfterGame() : leaveGame());
+$("coach-next").onclick = nextLesson;
+$("coach-keep").onclick = () => finishTutorial(true);
+$("how-to").onclick = startTutorial;
+$("edit-name").onclick = showNameScreen;
+$("name-form").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const n = cleanName($("name-input").value);
+  if (!n) { $("name-msg").textContent = "Type a name first."; return; }
+  profile.name = n; saveJSON("wallrush-profile", profile);
+  const g = online.game;
+  if (g && online.role) publishGame({ ...g, seq: g.seq + 1, names: { ...g.names, [online.me]: n }, ts: Date.now() });
+  if (!pendingCode && offerInstall()) { showInstall(); return; }
+  afterSetup();
+});
+$("add-home").onclick = showInstall;
+$("nudge-go").onclick = showInstall;
+$("nudge-close").onclick = () => { nudgeOn = false; render(); };
+$("paste-invite").onclick = pasteInvite;
+$("invite-dismiss").onclick = clearInvite;
+$("invite-join").onclick = () => { if (!invite) return; const c = invite.code; clearInvite(); setMode("online"); joinGame(c); };
+$("install-done").onclick = closeInstall;
+$("install-later").onclick = closeInstall;
+$("install-now").onclick = async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  try { await deferredInstall.userChoice; } catch (e) {}
+  deferredInstall = null;
+  closeInstall();
+};
+$("place-wall").onclick = () => { if (hover && hover.type === "wall" && humanTurn()) placeWall(hover.w); };
+$("cancel-wall").onclick = () => { hover = null; setStatus(); };
+$("new").onclick = newGame;
+$("again").onclick = () => (mode === "online" ? requestRematch() : newGame());
+$("again-other").onclick = () => {
+  const v = otherMode(state.variant || "race");
+  mode === "online" ? requestRematch(v) : setVariant(v);
+};
+$("leave-game").onclick = leaveAfterGame;
+$("my-ball").onclick = showStyle;
+$("style-save").onclick = saveStyle;
+$("style-cancel").onclick = () => { screen = "game"; render(); };
+
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+window.addEventListener("resize", resize);
+
+function start(data) {
+  if (data && data.state && data.mode !== "online") { mode = data.mode; state = data.state; history = data.history || []; }
+  else { state = freshState(); history = []; }
+  for (const k of ["cpu", "pvp", "online"]) $("mode-" + k).setAttribute("aria-pressed", mode === k);
+  online.me = profile.id;
+  readColors(); resize(); render(); scheduleCpu();
+  requestAnimationFrame(draw);
+  const xkey = new URLSearchParams(location.search).get("x");
+  const m = launchedFromInstall() ? null : /^#([A-Za-z0-9]{5})$/.exec(location.hash || "");
+  // Someone opening the home screen app has already played in the browser, so the app skips the tutorial.
+  if (launchedFromInstall() && !profile.name && /^[a-z0-9]{12}$/.test(xkey || "")) { saveJSON("wallrush-tutorial", true); startImport(xkey); }
+  else if (!loadJSON("wallrush-tutorial", false) && !isStandalone()) { pendingCode = m && m[1].toUpperCase(); startTutorial(); }
+  else if (!profile.name) { saveJSON("wallrush-tutorial", true); pendingCode = m && m[1].toUpperCase(); showNameScreen(); }
+  else { connect(); initOnline(); }
+}
+start({});
+</script>
+</body>
+</html>

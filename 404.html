@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Biko's Lab has moved</title>
+<script>
+  // The store moved to its own address. Keep whatever page the visitor asked for.
+  var rest = location.pathname.replace(/^\/app-store\/?/, "");
+  if (rest === "404.html" || rest === "index.html") rest = "";
+  location.replace("https://bikos-lab.vercel.app/" + rest + location.search + location.hash);
+</script>
+<meta http-equiv="refresh" content="2;url=https://bikos-lab.vercel.app/">
+</head>
+<body style="font:16px system-ui;margin:40px 20px">
+<p>Biko's Lab has moved to <a href="https://bikos-lab.vercel.app/">bikos-lab.vercel.app</a>.</p>
+</body>
+</html>
